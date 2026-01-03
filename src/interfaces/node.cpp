@@ -285,8 +285,19 @@ public:
     std::unique_ptr<Handler> handleNotifyBlockTip(NotifyBlockTipFn fn) override
     {
         return MakeHandler(::uiInterface.NotifyBlockTip_connect([fn](SynchronizationState sync_state, const CBlockIndex* block) {
-            fn(sync_state, BlockTip{block->nHeight, block->GetBlockTime(), block->GetBlockHash()},
-                GuessVerificationProgress(Params().TxData(), block));
+            // Calculate progress as: validated_blocks / best_header_height
+            // This shows how much of the known chain has been fully downloaded and validated
+            double progress = 0.0;
+            {
+                LOCK(cs_main);
+                if (pindexBestHeader && pindexBestHeader->nHeight > 0) {
+                    progress = static_cast<double>(block->nHeight) / static_cast<double>(pindexBestHeader->nHeight);
+                    // Clamp to [0, 1]
+                    if (progress > 1.0) progress = 1.0;
+                    if (progress < 0.0) progress = 0.0;
+                }
+            }
+            fn(sync_state, BlockTip{block->nHeight, block->GetBlockTime(), block->GetBlockHash()}, progress);
         }));
     }
     std::unique_ptr<Handler> handleNotifyHeaderTip(NotifyHeaderTipFn fn) override
