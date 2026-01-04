@@ -22,7 +22,7 @@
 #include <arith_uint256.h>
 #include <util/system.h>  // for LogPrintf, if you want
 #include <consensus/params.h>  // for Consensus::Params
-#include "crypto/rinhash.h"  // RinHashの場所に応じてパス変更
+#include "crypto/rinhash.h"  // Change the path according to the location of RinHash
 
 static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
@@ -56,11 +56,31 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
  *     CTxOut(nValue=50.00000000, scriptPubKey=0x5F1DF16B2B704C8A578D0B)
  *   vMerkleTree: 4a5e1e
  */
- static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
+ static CBlock CreateMainGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
  {
      const char* pszTimestamp = "RinCoin Genesis Block - RinHash Launch";
      const CScript genesisOutputScript = CScript() 
          << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f")
+         << OP_CHECKSIG;
+ 
+     return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
+ }
+
+ static CBlock CreateTestNetGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
+ {
+     const char* pszTimestamp = "RinCoin Test Genesis Block - RinHash Test1";
+     const CScript genesisOutputScript = CScript() 
+         << ParseHex("049dcc1230171f40b336c78b70c32ff5109172a9e30d577e4071fb69e30ee40be7732aeaaf5497bf230a4640406a9c1b7c785732c380cd604bfa06802a1ba3894a")
+         << OP_CHECKSIG;
+ 
+     return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
+ }
+
+ static CBlock CreateRegTestGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
+ {
+     const char* pszTimestamp = "RinCoin RegTest Genesis Block - RinHash RegTest1";
+     const CScript genesisOutputScript = CScript() 
+         << ParseHex("04b1c2d3e4f5a6b7c8d9eaf1b2c3d4e5f6a7b8c9dae1f2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9eaf1b2c3d4e5f6a7b8c9dae1f2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1")
          << OP_CHECKSIG;
  
      return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
@@ -114,17 +134,17 @@ public:
          * The characters are rarely used upper ASCII, not valid as UTF-8, and produce
          * a large 32-bit integer with any alignment.
          */
-        pchMessageStart[0] = 0x52;
-        pchMessageStart[1] = 0x49;
-        pchMessageStart[2] = 0x4E;
-        pchMessageStart[3] = 0x43;
+        pchMessageStart[0] = 0x52; // R
+        pchMessageStart[1] = 0x49; // I
+        pchMessageStart[2] = 0x4E; // N
+        pchMessageStart[3] = 0x43; // C
         nDefaultPort = 9555;
         nPruneAfterHeight = 100000;
         m_assumed_blockchain_size = 40;
         m_assumed_chain_state_size = 2;
 
         // CreateGenesisBlock(nTime, nNonce, nBits, nVersion, reward)
-        genesis = CreateGenesisBlock(1743054848, 34088, 0x1f00ffff, 1, 50 * COIN);
+        genesis = CreateMainGenesisBlock(1743054848, 34088, 0x1f00ffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
         assert(consensus.hashGenesisBlock == uint256S("0x000096bdd6e4613ca89b074ebd6f609aba6fe3f868b34ee79380aa3bc7a8c9db"));
         assert(genesis.hashMerkleRoot == uint256S("0x8590c08530d2ed422b726a938f07df8f380671569e04dcb556dcb9601c47cdad"));
@@ -135,14 +155,17 @@ public:
         // This is fine at runtime as we'll fall back to using them as an addrfetch if they don't support the
         // service bits we want, but we should get them updated to support all service bits wanted by any
         // release ASAP to avoid it where possible.
-        vSeeds.emplace_back("seed.rin.so");
+        
+        vSeeds.emplace_back("seed.rin.co");  // obsolete DNS seeder, does not seem to work anymore
+        vSeeds.emplace_back("seed.rincoin.net");  // official DNS seeder
+        vSeeds.emplace_back("seed.rincoin.org");  // backup DNS seeder
 
-        base58Prefixes[PUBKEY_ADDRESS] = {60};
-        base58Prefixes[SCRIPT_ADDRESS] = {122};
+        base58Prefixes[PUBKEY_ADDRESS] = {60};  // "R..."
+        base58Prefixes[SCRIPT_ADDRESS] = {122}; // "r..."
         base58Prefixes[SCRIPT_ADDRESS2] = std::vector<unsigned char>(1,50);
-        base58Prefixes[SECRET_KEY] =     {188};
-        base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x88, 0xB2, 0x1E};
-        base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x88, 0xAD, 0xE4};
+        base58Prefixes[SECRET_KEY] =     {188}; // "7J../7K..."
+        base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x88, 0xB2, 0x1E};  // "xpub..."
+        base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x88, 0xAD, 0xE4};  // "xprv..."
 
         bech32_hrp = "rin";
         mweb_hrp = "rinmweb";
@@ -160,9 +183,9 @@ public:
         };
 
         chainTxData = ChainTxData{
-            /* nTime    */ 1743054848, // RinCoinのGenesisのtimestampと同じでOK
-            /* nTxCount */ 1,          // Genesisのcoinbaseのみ
-            /* dTxRate  */ 0.0         // 実際はまだTxがない
+            /* nTime    */ 1743054848, // It's OK to use the same timestamp as RinCoin's Genesis
+            /* nTxCount */ 1,          // Only the Genesis coinbase
+            /* dTxRate  */ 0.0         // Actually, there are no transactions yet
         };
         
     }
@@ -220,24 +243,24 @@ public:
         m_assumed_blockchain_size = 4;
         m_assumed_chain_state_size = 1;
 
-        genesis = CreateGenesisBlock(1743054848, 34088, 0x1f00ffff, 1, 50 * COIN);
+        genesis = CreateTestNetGenesisBlock(1743059000, 1, 0x1f00ffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x000096bdd6e4613ca89b074ebd6f609aba6fe3f868b34ee79380aa3bc7a8c9db"));
-        assert(genesis.hashMerkleRoot == uint256S("0x8590c08530d2ed422b726a938f07df8f380671569e04dcb556dcb9601c47cdad"));
+        assert(consensus.hashGenesisBlock == uint256S("0xcebcb3d1fa06e0561a602d5533dbf9ba4342696b02fed87281dfc7a040f9d87d"));
+        assert(genesis.hashMerkleRoot == uint256S("0x30a6e54c5f42ade3ba0b8d7dcf4e1ac82a8f323d71b7ccd6650d9df6a9c2109c"));
 
         vFixedSeeds.clear();
         vSeeds.clear();
         // nodes with support for servicebits filtering should be at the top
 
-        base58Prefixes[PUBKEY_ADDRESS] = {60};
-        base58Prefixes[SCRIPT_ADDRESS] = {122};
+        base58Prefixes[PUBKEY_ADDRESS] = {65};  // "T...""
+        base58Prefixes[SCRIPT_ADDRESS] = {127}; // "t...""
         base58Prefixes[SCRIPT_ADDRESS2] = std::vector<unsigned char>(1,50);
-        base58Prefixes[SECRET_KEY] =     {188};
-        base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x88, 0xB2, 0x1E};
-        base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x88, 0xAD, 0xE4};
+        base58Prefixes[SECRET_KEY] =     {209}; // "8K.../8L..."
+        base58Prefixes[EXT_PUBLIC_KEY] = {0x04, 0x35, 0x87, 0xCF};  // "tpub..."
+        base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};  // "tprv..."
 
         bech32_hrp = "trin";
-        mweb_hrp = "tmweb";
+        mweb_hrp = "trmweb";
 
         vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_test), std::end(chainparams_seed_test));
 
@@ -248,14 +271,14 @@ public:
 
         checkpointData = {
             {
-                {0, uint256S("0x000096bdd6e4613ca89b074ebd6f609aba6fe3f868b34ee79380aa3bc7a8c9db")}
+                {0, uint256S("0xcebcb3d1fa06e0561a602d5533dbf9ba4342696b02fed87281dfc7a040f9d87d")}  //TODO put hashGenesisBlock value here
             }
         };
 
         chainTxData = ChainTxData{
-            /* nTime    */ 1743054848, // RinCoinのGenesisのtimestampと同じでOK
-            /* nTxCount */ 1,          // Genesisのcoinbaseのみ
-            /* dTxRate  */ 0.0         // 実際はまだTxがない
+            /* nTime    */ 1743059000, // It's OK to use the same timestamp as RinCoin's Genesis
+            /* nTxCount */ 1,          // Only the Genesis coinbase
+            /* dTxRate  */ 0.0         // Actually, there are no transactions yet
         };
     }
 };
@@ -314,10 +337,10 @@ public:
 
         UpdateActivationParametersFromArgs(args);
 
-        genesis = CreateGenesisBlock(1743054848, 0, 0x207fffff, 1, 50 * COIN);
+        genesis = CreateRegTestGenesisBlock(1743059120, 0, 0x207fffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("18495754fab5353ade323ba86bf000367df7c61a8520f7be621765cca24a3894"));
-        assert(genesis.hashMerkleRoot == uint256S("8590c08530d2ed422b726a938f07df8f380671569e04dcb556dcb9601c47cdad"));
+        assert(consensus.hashGenesisBlock == uint256S("0xdf59dff487a4f9ecf91a0a1313c5e639fd416e5e3a79b584887733284ca11b57"));
+        assert(genesis.hashMerkleRoot == uint256S("0x0c61edd3b8b90d8a5dcd3eb6070feaebc0f2da6cdea61b7befdf04546a092f1e"));
         
         vFixedSeeds.clear(); //!< Regtest mode doesn't have any fixed seeds.
         vSeeds.clear();      //!< Regtest mode doesn't have any DNS seeds.
@@ -329,7 +352,7 @@ public:
 
         checkpointData = {
             {
-                {0, uint256S("0x18495754fab5353ade323ba86bf000367df7c61a8520f7be621765cca24a3894")},
+                {0, uint256S("0xdf59dff487a4f9ecf91a0a1313c5e639fd416e5e3a79b584887733284ca11b57")},  //TODO put hashGenesisBlock value here
             }
         };
 
@@ -347,7 +370,7 @@ public:
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
 
         bech32_hrp = "rrin";
-        mweb_hrp = "tmweb";
+        mweb_hrp = "rrmweb";
     }
 
     /**
