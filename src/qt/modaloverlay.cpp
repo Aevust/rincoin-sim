@@ -12,6 +12,8 @@
 #include <QPropertyAnimation>
 #include <QResizeEvent>
 
+#include <cmath>
+
 ModalOverlay::ModalOverlay(bool enable_wallet, QWidget *parent) :
 QWidget(parent),
 ui(new Ui::ModalOverlay),
@@ -108,8 +110,19 @@ void ModalOverlay::tipUpdate(int count, const QDateTime& blockDate, double nVeri
             if (sample.first < (currentDate.toMSecsSinceEpoch() - 500 * 1000) || i == blockProcessTime.size() - 1) {
                 progressDelta = blockProcessTime[0].second - sample.second;
                 timeDelta = blockProcessTime[0].first - sample.first;
-                progressPerHour = progressDelta / (double) timeDelta * 1000 * 3600;
-                remainingMSecs = (progressDelta > 0) ? remainingProgress / progressDelta * timeDelta : -1;
+                
+                // Sanity check: if progress went backwards significantly or delta is unreasonable,
+                // clear old samples (this can happen if progress calculation method changed)
+                if (progressDelta < -0.01 || (timeDelta > 0 && std::abs(progressDelta / timeDelta * 1000 * 3600) > 10.0)) {
+                    // Progress went backwards or rate is unreasonable (>1000% per hour), clear old samples
+                    blockProcessTime.clear();
+                    blockProcessTime.push_front(qMakePair(currentDate.toMSecsSinceEpoch(), nVerificationProgress));
+                    progressPerHour = 0;
+                    remainingMSecs = -1;
+                } else {
+                    progressPerHour = (timeDelta > 0) ? progressDelta / (double) timeDelta * 1000 * 3600 : 0;
+                    remainingMSecs = (progressDelta > 0) ? remainingProgress / progressDelta * timeDelta : -1;
+                }
                 break;
             }
         }
@@ -156,7 +169,9 @@ void ModalOverlay::tipUpdate(int count, const QDateTime& blockDate, double nVeri
 
 void ModalOverlay::UpdateHeaderSyncLabel() {
     int est_headers_left = bestHeaderDate.secsTo(QDateTime::currentDateTime()) / Params().GetConsensus().nPowTargetSpacing;
-    ui->numberOfBlocksLeft->setText(tr("Unknown. Syncing Headers (%1, %2%)...").arg(bestHeaderHeight).arg(QString::number(100.0 / (bestHeaderHeight + est_headers_left) * bestHeaderHeight, 'f', 1)));
+    int total_estimated = bestHeaderHeight + est_headers_left;
+    double progress = (total_estimated > 0) ? (100.0 * bestHeaderHeight / total_estimated) : 0.0;
+    ui->numberOfBlocksLeft->setText(tr("Unknown. Syncing Headers (%1, %2%)...").arg(bestHeaderHeight).arg(QString::number(progress, 'f', 1)));
 }
 
 void ModalOverlay::toggleVisibility()

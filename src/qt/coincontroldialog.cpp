@@ -47,7 +47,8 @@ CoinControlDialog::CoinControlDialog(CCoinControl& coin_control, WalletModel* _m
     ui(new Ui::CoinControlDialog),
     m_coin_control(coin_control),
     model(_model),
-    platformStyle(_platformStyle)
+    platformStyle(_platformStyle),
+    m_updateLabelsTimer(nullptr)
 {
     ui->setupUi(this);
 
@@ -139,6 +140,12 @@ CoinControlDialog::CoinControlDialog(CCoinControl& coin_control, WalletModel* _m
 
     GUIUtil::handleCloseWindowShortcut(this);
 
+    // Setup debounce timer for updateLabels (100ms delay)
+    m_updateLabelsTimer = new QTimer(this);
+    m_updateLabelsTimer->setSingleShot(true);
+    m_updateLabelsTimer->setInterval(100);
+    connect(m_updateLabelsTimer, &QTimer::timeout, this, &CoinControlDialog::doUpdateLabels);
+
     if(_model->getOptionsModel() && _model->getAddressTableModel())
     {
         updateView();
@@ -176,11 +183,36 @@ void CoinControlDialog::buttonSelectAllClicked()
             break;
         }
     }
+
+    // Block signals to prevent per-item updateLabels calls
+    ui->treeWidget->blockSignals(true);
     ui->treeWidget->setEnabled(false);
-    for (int i = 0; i < ui->treeWidget->topLevelItemCount(); i++)
-            if (ui->treeWidget->topLevelItem(i)->checkState(COLUMN_CHECKBOX) != state)
-                ui->treeWidget->topLevelItem(i)->setCheckState(COLUMN_CHECKBOX, state);
+
+    for (int i = 0; i < ui->treeWidget->topLevelItemCount(); i++) {
+        QTreeWidgetItem* topItem = ui->treeWidget->topLevelItem(i);
+        if (topItem->checkState(COLUMN_CHECKBOX) != state)
+            topItem->setCheckState(COLUMN_CHECKBOX, state);
+
+        // Also update children in tree mode (parent state change doesn't auto-propagate with blocked signals)
+        for (int j = 0; j < topItem->childCount(); j++) {
+            QTreeWidgetItem* childItem = topItem->child(j);
+            if (!childItem->isDisabled() && childItem->checkState(COLUMN_CHECKBOX) != state) {
+                childItem->setCheckState(COLUMN_CHECKBOX, state);
+                // Update coin control selection
+                if (IsCanonical(childItem) || IsMWEB(childItem)) {
+                    CInputCoin input_coin = BuildInputCoin(childItem);
+                    if (state == Qt::Checked)
+                        m_coin_control.Select(input_coin.GetIndex());
+                    else
+                        m_coin_control.UnSelect(input_coin.GetIndex());
+                }
+            }
+        }
+    }
+
+    ui->treeWidget->blockSignals(false);
     ui->treeWidget->setEnabled(true);
+
     if (state == Qt::Unchecked)
         m_coin_control.UnSelectAll(); // just to be sure
     CoinControlDialog::updateLabels(m_coin_control, model, this);
@@ -410,10 +442,23 @@ void CoinControlDialog::viewItemChanged(QTreeWidgetItem* item, int column)
         else
             m_coin_control.Select(input_coin.GetIndex());
 
-        // selection changed -> update labels
+        // selection changed -> schedule debounced update
         if (ui->treeWidget->isEnabled()) // do not update on every click for (un)select all
-            CoinControlDialog::updateLabels(m_coin_control, model, this);
+            scheduleUpdateLabels();
     }
+}
+
+// Schedule a debounced updateLabels call
+void CoinControlDialog::scheduleUpdateLabels()
+{
+    if (m_updateLabelsTimer)
+        m_updateLabelsTimer->start(); // (re)starts the timer
+}
+
+// Called by debounce timer
+void CoinControlDialog::doUpdateLabels()
+{
+    CoinControlDialog::updateLabels(m_coin_control, model, this);
 }
 
 // shows count of locked unspent outputs
@@ -616,6 +661,30 @@ void CoinControlDialog::updateLabels(CCoinControl& m_coin_control, WalletModel *
         label->setVisible(nChange < 0);
 }
 
+// Build cache of address -> label mappings to avoid repeated DB lookups
+void CoinControlDialog::buildLabelCache()
+{
+    m_labelCache.clear();
+    if (!model || !model->getAddressTableModel())
+        return;
+
+    // Get all addresses from wallet and cache their labels
+    for (const auto& address : model->wallet().getAddresses()) {
+        QString qAddress = QString::fromStdString(EncodeDestination(address.dest));
+        QString qLabel = QString::fromStdString(address.name);
+        m_labelCache.insert(qAddress, qLabel);
+    }
+}
+
+// Get label from cache, returns empty string if not found
+QString CoinControlDialog::cachedLabelForAddress(const QString& address)
+{
+    auto it = m_labelCache.find(address);
+    if (it != m_labelCache.end())
+        return it.value();
+    return QString();
+}
+
 void CoinControlDialog::updateView()
 {
     if (!model || !model->getOptionsModel() || !model->getAddressTableModel())
@@ -623,6 +692,12 @@ void CoinControlDialog::updateView()
 
     bool treeMode = ui->radioTreeMode->isChecked();
 
+    // Build label cache once before iterating UTXOs
+    buildLabelCache();
+
+    // Block signals and disable sorting during population for performance
+    ui->treeWidget->blockSignals(true);
+    ui->treeWidget->setSortingEnabled(false);
     ui->treeWidget->clear();
     ui->treeWidget->setEnabled(false); // performance, otherwise updateLabels would be called for every checked checkbox
     ui->treeWidget->setAlternatingRowColors(!treeMode);
@@ -634,7 +709,7 @@ void CoinControlDialog::updateView()
     for (const auto& coins : model->wallet().listCoins()) {
         CCoinControlWidgetItem* itemWalletAddress{nullptr};
         QString sWalletAddress = QString::fromStdString(EncodeDestination(coins.first));
-        QString sWalletLabel = model->getAddressTableModel()->labelForAddress(sWalletAddress); // MWEB: We need to check if peg-in, change, etc.
+        QString sWalletLabel = cachedLabelForAddress(sWalletAddress);
         if (sWalletLabel.isEmpty())
             sWalletLabel = tr("(no label)");
 
@@ -698,7 +773,7 @@ void CoinControlDialog::updateView()
             }
             else if (!treeMode)
             {
-                QString sLabel = model->getAddressTableModel()->labelForAddress(sAddress);
+                QString sLabel = cachedLabelForAddress(sAddress);
                 if (sLabel.isEmpty())
                     sLabel = tr("(no label)");
                 itemOutput->setText(COLUMN_LABEL, sLabel);
@@ -759,8 +834,12 @@ void CoinControlDialog::updateView()
                 ui->treeWidget->topLevelItem(i)->setExpanded(true);
     }
 
-    // sort view
+    // Re-enable sorting and perform sort
+    ui->treeWidget->setSortingEnabled(true);
     sortView(sortColumn, sortOrder);
+
+    // Re-enable signals and widget
+    ui->treeWidget->blockSignals(false);
     ui->treeWidget->setEnabled(true);
 }
 

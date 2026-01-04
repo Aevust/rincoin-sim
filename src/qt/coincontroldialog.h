@@ -11,10 +11,12 @@
 #include <QAbstractButton>
 #include <QAction>
 #include <QDialog>
+#include <QHash>
 #include <QList>
 #include <QMenu>
 #include <QPoint>
 #include <QString>
+#include <QTimer>
 #include <QTreeWidgetItem>
 
 class PlatformStyle;
@@ -67,6 +69,15 @@ private:
 
     const PlatformStyle *platformStyle;
 
+    // Label cache for performance (avoids repeated DB lookups)
+    QHash<QString, QString> m_labelCache;
+    void buildLabelCache();
+    QString cachedLabelForAddress(const QString& address);
+
+    // Debounce timer for updateLabels
+    QTimer* m_updateLabelsTimer;
+    void scheduleUpdateLabels();
+
     CInputCoin BuildInputCoin(QTreeWidgetItem* item);
     OutputIndex BuildOutputIndex(QTreeWidgetItem* item);
 
@@ -118,6 +129,7 @@ private Q_SLOTS:
     void buttonBoxClicked(QAbstractButton*);
     void buttonSelectAllClicked();
     void updateLabelLocked();
+    void doUpdateLabels();
 };
 
 #endif // BITCOIN_QT_COINCONTROLDIALOG_H
