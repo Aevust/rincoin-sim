@@ -53,6 +53,9 @@
 #include <warnings.h>
 
 #include <string>
+#include <thread>
+#include <vector>
+#include <atomic>
 
 #include <boost/algorithm/string/replace.hpp>
 
@@ -374,6 +377,7 @@ static void UpdateMempoolForReorg(CTxMemPool& mempool, DisconnectedBlockTransact
 {
     AssertLockHeld(cs_main);
     AssertLockHeld(mempool.cs);
+    if (disconnectpool.queuedTx.empty()) return;
     std::vector<uint256> vHashUpdate;
     // disconnectpool's insertion_order index sorts the entries from
     // oldest to newest, but the oldest entry will be the last tx from the
@@ -4208,6 +4212,10 @@ static FlatFileSeq UndoFileSeq()
 
 FILE* OpenBlockFile(const FlatFilePos &pos, bool fReadOnly) {
     return BlockFileSeq().Open(pos, fReadOnly);
+}
+
+FILE* OpenBlockFileSequential(const FlatFilePos &pos) {
+    return BlockFileSeq().OpenSequential(pos);
 }
 
 /** Open an undo file (rev?????.dat) */
