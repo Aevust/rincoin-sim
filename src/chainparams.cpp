@@ -68,7 +68,7 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
 
  static CBlock CreateTestNetGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
  {
-     const char* pszTimestamp = "RinCoin Test Genesis Block - RinHash Test1";
+     const char* pszTimestamp = "RinCoin Genesis Block - RinHash Test1";
      const CScript genesisOutputScript = CScript() 
          << ParseHex("049dcc1230171f40b336c78b70c32ff5109172a9e30d577e4071fb69e30ee40be7732aeaaf5497bf230a4640406a9c1b7c785732c380cd604bfa06802a1ba3894a")
          << OP_CHECKSIG;
@@ -78,7 +78,7 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
 
  static CBlock CreateRegTestGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
  {
-     const char* pszTimestamp = "RinCoin RegTest Genesis Block - RinHash RegTest1";
+     const char* pszTimestamp = "RinCoin Genesis Block - RinHash RegTest1";
      const CScript genesisOutputScript = CScript() 
          << ParseHex("04b1c2d3e4f5a6b7c8d9eaf1b2c3d4e5f6a7b8c9dae1f2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9eaf1b2c3d4e5f6a7b8c9dae1f2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1")
          << OP_CHECKSIG;
@@ -156,9 +156,7 @@ public:
         // service bits we want, but we should get them updated to support all service bits wanted by any
         // release ASAP to avoid it where possible.
         
-        vSeeds.emplace_back("seed.rin.co");  // obsolete DNS seeder, does not seem to work anymore
         vSeeds.emplace_back("seed.rincoin.net");  // official DNS seeder
-        vSeeds.emplace_back("seed.rincoin.org");  // backup DNS seeder
 
         base58Prefixes[PUBKEY_ADDRESS] = {60};  // "R..."
         base58Prefixes[SCRIPT_ADDRESS] = {122}; // "r..."
@@ -243,10 +241,10 @@ public:
         m_assumed_blockchain_size = 4;
         m_assumed_chain_state_size = 1;
 
-        genesis = CreateTestNetGenesisBlock(1743059000, 1, 0x1f00ffff, 1, 50 * COIN);
+        genesis = CreateTestNetGenesisBlock(1743059000, 27864, 0x1f00ffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0xcebcb3d1fa06e0561a602d5533dbf9ba4342696b02fed87281dfc7a040f9d87d"));
-        assert(genesis.hashMerkleRoot == uint256S("0x30a6e54c5f42ade3ba0b8d7dcf4e1ac82a8f323d71b7ccd6650d9df6a9c2109c"));
+        assert(consensus.hashGenesisBlock == uint256S("0x00009d5fbc8579e8b4292f1bab22437d9468c0cc615cb5b0242d8159b31760ad"));
+        assert(genesis.hashMerkleRoot == uint256S("0x7a2a292324679fdd5b843a9daf72acc7b2801ab95321e863e545f69ced707b0e"));
 
         vFixedSeeds.clear();
         vSeeds.clear();
@@ -271,7 +269,7 @@ public:
 
         checkpointData = {
             {
-                {0, uint256S("0xcebcb3d1fa06e0561a602d5533dbf9ba4342696b02fed87281dfc7a040f9d87d")}  //TODO put hashGenesisBlock value here
+                {0, uint256S("0x00009d5fbc8579e8b4292f1bab22437d9468c0cc615cb5b0242d8159b31760ad")}  //TODO put hashGenesisBlock value here
             }
         };
 
@@ -302,7 +300,7 @@ public:
         consensus.SegwitHeight = 0; // SEGWIT is always activated on regtest unless overridden
         consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.DGWHeight = 100; // Dark Gravity Wave (DGW) difficulty adjustment algorithm
+        consensus.DGWHeight = std::numeric_limits<int>::max();  // Turns off Dark Gravity Wave (DGW) difficulty adjustment algorithm for regtest
         consensus.nPowTargetTimespan = 33 * 60 * 60; // 33hour
         consensus.nPowTargetSpacing = 60 * 50;
         consensus.fPowAllowMinDifficultyBlocks = true;
@@ -339,8 +337,8 @@ public:
 
         genesis = CreateRegTestGenesisBlock(1743059120, 0, 0x207fffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0xdf59dff487a4f9ecf91a0a1313c5e639fd416e5e3a79b584887733284ca11b57"));
-        assert(genesis.hashMerkleRoot == uint256S("0x0c61edd3b8b90d8a5dcd3eb6070feaebc0f2da6cdea61b7befdf04546a092f1e"));
+        assert(consensus.hashGenesisBlock == uint256S("0x7d2c8c57ce2597f86c9fe41f9865ad664b04d2aad4321fdaab48ed3da1805fe7"));
+        assert(genesis.hashMerkleRoot == uint256S("0xe3c12cbf8b33dc3a00cbe56699682fa6b2f7b03b981539dd079394df8315ff12"));
         
         vFixedSeeds.clear(); //!< Regtest mode doesn't have any fixed seeds.
         vSeeds.clear();      //!< Regtest mode doesn't have any DNS seeds.
@@ -352,7 +350,7 @@ public:
 
         checkpointData = {
             {
-                {0, uint256S("0xdf59dff487a4f9ecf91a0a1313c5e639fd416e5e3a79b584887733284ca11b57")},  //TODO put hashGenesisBlock value here
+                {0, uint256S("0x7d2c8c57ce2597f86c9fe41f9865ad664b04d2aad4321fdaab48ed3da1805fe7")},  //TODO put hashGenesisBlock value here
             }
         };
 
