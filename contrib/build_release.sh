@@ -196,8 +196,8 @@ check_prerequisites() {
     done
     
     # Check if Docker is running
-    if ! sudo docker info &> /dev/null; then
-        print_error "Docker is not running or requires sudo. Please start Docker first."
+    if ! docker info &> /dev/null; then
+        print_error "Docker is not running. Please start Docker first."
         exit 1
     fi
     
@@ -247,11 +247,11 @@ build_linux_binaries() {
     # Check if we should rebuild the image
     if [ "$CLEAN_BUILD" = "true" ]; then
         print_info "Clean build requested - removing existing Docker image..."
-        sudo docker rmi "$image_name" 2>/dev/null || true
+        docker rmi "$image_name" 2>/dev/null || true
     fi
     
     # Check if image already exists
-    if sudo docker image inspect "$image_name" >/dev/null 2>&1; then
+    if docker image inspect "$image_name" >/dev/null 2>&1; then
         print_info "Using existing Docker image: $image_name"
         print_info "(Use --clean flag to rebuild)"
     else
@@ -292,7 +292,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /build
 DOCKERFILE_END
 
-        sudo docker build -t "$image_name" -f "$dockerfile" "${BUILD_DIR}" || {
+        docker build -t "$image_name" -f "$dockerfile" "${BUILD_DIR}" || {
             print_error "Failed to build Linux Docker image"
             return 1
         }
@@ -300,7 +300,7 @@ DOCKERFILE_END
     
     print_info "Compiling Rincoin for Linux..."
     
-    sudo docker run --rm \
+    docker run --rm \
         -v "${SOURCE_DIR}:/source:ro" \
         -v "${BDB_PREFIX}:/db4:ro" \
         -v "${BUILD_DIR}:/output" \
@@ -360,11 +360,11 @@ build_windows_binaries() {
     # Check if we should rebuild the image
     if [ "$CLEAN_BUILD" = "true" ]; then
         print_info "Clean build requested - removing existing Docker image..."
-        sudo docker rmi "$image_name" 2>/dev/null || true
+        docker rmi "$image_name" 2>/dev/null || true
     fi
     
     # Check if image already exists
-    if sudo docker image inspect "$image_name" >/dev/null 2>&1; then
+    if docker image inspect "$image_name" >/dev/null 2>&1; then
         print_info "Using existing Docker image: $image_name"
         print_info "(Use --clean flag to rebuild)"
     else
@@ -402,7 +402,7 @@ RUN update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32
 WORKDIR /build
 DOCKERFILE_END
 
-        sudo docker build -t "$image_name" -f "$dockerfile" "${BUILD_DIR}" || {
+        docker build -t "$image_name" -f "$dockerfile" "${BUILD_DIR}" || {
             print_error "Failed to build Windows Docker image"
             return 1
         }
@@ -411,7 +411,7 @@ DOCKERFILE_END
     print_info "Compiling Rincoin for Windows..."
     print_info "Building dependencies first (this may take 30-60 minutes)..."
     
-    sudo docker run --rm \
+    docker run --rm \
         -v "${SOURCE_DIR}:/source:ro" \
         -v "${BUILD_DIR}:/output" \
         -v "${DEPENDS_SOURCES_CACHE}:/depends_sources_cache" \
