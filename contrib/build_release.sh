@@ -26,22 +26,42 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Parse arguments
 CLEAN_BUILD=false
+CLEAN_IMAGES=false
+LOCAL_BUILD=false
 if [ -z "$1" ]; then
-    echo -e "${RED}Error: Version tag is required${NC}"
-    echo "Usage: $0 <git-tag> [git-url] [--clean]"
+    echo -e "${RED}Error: Version tag or --local is required${NC}"
+    echo "Usage: $0 <git-tag|--local> [git-url] [--clean] [--clean-all]"
     echo "Example: $0 v1.0.1"
     echo "Example: $0 v1.0.1 https://github.com/Rin-coin/rincoin.git --clean"
+    echo "Example: $0 --local --clean-all"
     exit 1
 fi
 
-GIT_TAG="${1}"
-shift
+# Check for --local flag
+if [ "$1" == "--local" ]; then
+    LOCAL_BUILD=true
+    GIT_TAG="local"
+    shift
+else
+    GIT_TAG="${1}"
+    shift
+fi
 
 # Parse optional arguments
 while [ $# -gt 0 ]; do
     case "$1" in
         --clean)
             CLEAN_BUILD=true
+            shift
+            ;;
+        --clean-all)
+            CLEAN_BUILD=true
+            CLEAN_IMAGES=true
+            shift
+            ;;
+        --local)
+            LOCAL_BUILD=true
+            GIT_TAG="local"
             shift
             ;;
         *)
@@ -54,7 +74,11 @@ while [ $# -gt 0 ]; do
 done
 
 GIT_URL="${GIT_URL:-https://github.com/Rin-coin/rincoin.git}"
-VERSION="${GIT_TAG#v}"  # Remove 'v' prefix if present
+if [ "$LOCAL_BUILD" = "true" ]; then
+    VERSION="local"
+else
+    VERSION="${GIT_TAG#v}"  # Remove 'v' prefix if present
+fi
 
 # Build directories
 TEMP_DIR="/tmp/rincoin-build-$$"
@@ -79,10 +103,16 @@ CROSS_PLATFORMS=("linux" "windows")
 echo -e "${GREEN}============================================${NC}"
 echo -e "${GREEN}Rincoin Release Build Script${NC}"
 echo -e "${GREEN}============================================${NC}"
-echo -e "${BLUE}Git Tag:${NC} ${GIT_TAG}"
-echo -e "${BLUE}Version:${NC} ${VERSION}"
-echo -e "${BLUE}Git URL:${NC} ${GIT_URL}"
-echo -e "${BLUE}Clean Build:${NC} ${CLEAN_BUILD}"
+if [ "$LOCAL_BUILD" = "true" ]; then
+    echo -e "${BLUE}Build Mode:${NC} Local (current directory)"
+    echo -e "${BLUE}Version:${NC} ${VERSION}"
+else
+    echo -e "${BLUE}Git Tag:${NC} ${GIT_TAG}"
+    echo -e "${BLUE}Version:${NC} ${VERSION}"
+    echo -e "${BLUE}Git URL:${NC} ${GIT_URL}"
+fi
+echo -e "${BLUE}Clean Caches:${NC} ${CLEAN_BUILD}"
+echo -e "${BLUE}Clean Images:${NC} ${CLEAN_IMAGES}"
 echo -e "${BLUE}Cache Dir:${NC} ${CACHE_DIR}"
 echo -e "${YELLOW}Building on Ubuntu ${BUILD_UBUNTU_VERSION}${NC}"
 echo -e "${YELLOW}Binary will be compatible with Ubuntu 20.04+, Debian 11+, RHEL 8+${NC}"
@@ -112,44 +142,132 @@ cleanup() {
 # Clean cache if requested
 clean_cache() {
     if [ "$CLEAN_BUILD" = "true" ]; then
-        print_info "Clean build requested - removing build cache..."
+        print_info "Cleaning build caches..."
         if [ -d "$CACHE_DIR" ]; then
             rm -rf "$CACHE_DIR"
             print_info "Build cache removed: ${CACHE_DIR}"
         fi
+    fi
+    
+    if [ "$CLEAN_IMAGES" = "true" ]; then
+        print_info "Cleaning Docker images..."
+        docker rmi rincoin-builder:linux-ubuntu20 2>/dev/null || true
+        docker rmi rincoin-builder:linux-ubuntu24 2>/dev/null || true
+        docker rmi rincoin-builder:windows 2>/dev/null || true
+        print_info "Docker images removed"
     fi
 }
 
 # Set trap to cleanup on exit
 trap cleanup EXIT
 
-# Clone repository and checkout version
+# Clone repository and checkout version (or copy local)
 clone_and_checkout() {
     print_info "======================================"
-    print_info "Cloning Repository"
+    if [ "$LOCAL_BUILD" = "true" ]; then
+        print_info "Copying Local Source"
+    else
+        print_info "Cloning Repository"
+    fi
     print_info "======================================"
     
     rm -rf "$TEMP_DIR"
     mkdir -p "$TEMP_DIR"
     
-    print_info "Cloning from: ${GIT_URL}"
-    git clone --depth 1 --branch "$GIT_TAG" "$GIT_URL" "$SOURCE_DIR" || {
-        print_error "Failed to clone repository or checkout tag ${GIT_TAG}"
-        print_error "Make sure the tag exists: git tag | grep ${GIT_TAG}"
-        exit 1
-    }
-    
-    cd "$SOURCE_DIR"
-    local commit_hash=$(git rev-parse HEAD)
-    local commit_date=$(git log -1 --format=%cd --date=short)
-    
-    print_info "Checked out tag: ${GIT_TAG}"
-    print_info "Commit: ${commit_hash}"
-    print_info "Date: ${commit_date}"
+    if [ "$LOCAL_BUILD" = "true" ]; then
+        print_info "Copying from: ${PROJECT_ROOT}"
+        
+        # Use git-aware copy for efficiency (only tracked files, respects .gitignore)
+        cd "${PROJECT_ROOT}"
+        if [ -d ".git" ] && command -v rsync &> /dev/null; then
+            print_info "Using git-aware smart copy (tracked files only)..."
+            mkdir -p "${SOURCE_DIR}"
+            
+            # Get all tracked files (respects .gitignore automatically)
+            # Use --ignore-missing-args to skip deleted files that are still in git index
+            git ls-files -z | rsync -a --ignore-missing-args --files-from=- --from0 "${PROJECT_ROOT}/" "${SOURCE_DIR}/"
+            
+            # Also copy untracked files that are not ignored (e.g., new files)
+            git ls-files --others --exclude-standard -z | rsync -a --ignore-missing-args --files-from=- --from0 "${PROJECT_ROOT}/" "${SOURCE_DIR}/" 2>/dev/null || true
+            
+            # Copy .git directory for version info
+            if [ -d "${PROJECT_ROOT}/.git" ]; then
+                cp -r "${PROJECT_ROOT}/.git" "${SOURCE_DIR}/.git"
+            fi
+            
+            print_info "Smart copy completed (source files only, ignoring build artifacts)"
+        else
+            # Fallback to full copy if git or rsync not available
+            print_info "Using full directory copy..."
+            cp -r "${PROJECT_ROOT}" "${SOURCE_DIR}"
+            
+            # Clean up build artifacts and cache from copied source
+            print_info "Removing build artifacts..."
+            rm -rf "${SOURCE_DIR}/release-builds"
+            rm -rf "${SOURCE_DIR}/.build-cache"
+            rm -rf "${SOURCE_DIR}/depends/built"
+            rm -rf "${SOURCE_DIR}/depends/work"
+            
+            # Clean Qt-generated files to avoid MOC version conflicts
+            find "${SOURCE_DIR}/src/qt" -name "moc_*.cpp" -delete 2>/dev/null || true
+            find "${SOURCE_DIR}/src/qt" -name "*.moc" -delete 2>/dev/null || true
+            find "${SOURCE_DIR}/src/qt" -name "qrc_*.cpp" -delete 2>/dev/null || true
+            find "${SOURCE_DIR}/src/qt" -name "ui_*.h" -delete 2>/dev/null || true
+            find "${SOURCE_DIR}/src/qt/forms" -name "ui_*.h" -delete 2>/dev/null || true
+            
+            # Clean all compiled object files and libraries
+            find "${SOURCE_DIR}" -name "*.o" -delete 2>/dev/null || true
+            find "${SOURCE_DIR}" -name "*.a" -delete 2>/dev/null || true
+            find "${SOURCE_DIR}" -name "*.la" -delete 2>/dev/null || true
+            find "${SOURCE_DIR}" -name "*.lo" -delete 2>/dev/null || true
+            find "${SOURCE_DIR}" -name "*.so" -delete 2>/dev/null || true
+            find "${SOURCE_DIR}" -name "*.dylib" -delete 2>/dev/null || true
+            
+            # Clean autotools-generated files
+            rm -f "${SOURCE_DIR}/Makefile" 2>/dev/null || true
+            rm -f "${SOURCE_DIR}/src/Makefile" 2>/dev/null || true
+            rm -f "${SOURCE_DIR}/config.status" 2>/dev/null || true
+            rm -rf "${SOURCE_DIR}/src/.deps" 2>/dev/null || true
+            rm -rf "${SOURCE_DIR}/src/.libs" 2>/dev/null || true
+        fi
+        
+        cd "$SOURCE_DIR"
+        if [ -d ".git" ]; then
+            local commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+            local commit_date=$(git log -1 --format=%cd --date=short 2>/dev/null || echo "unknown")
+            print_info "Source: local working directory"
+            print_info "Commit: ${commit_hash}"
+            print_info "Date: ${commit_date}"
+        else
+            print_info "Source: local working directory (no git info)"
+        fi
+    else
+        print_info "Cloning from: ${GIT_URL}"
+        git clone --depth 1 --branch "$GIT_TAG" "$GIT_URL" "$SOURCE_DIR" || {
+            print_error "Failed to clone repository or checkout tag ${GIT_TAG}"
+            print_error "Make sure the tag exists: git tag | grep ${GIT_TAG}"
+            exit 1
+        }
+        
+        cd "$SOURCE_DIR"
+        local commit_hash=$(git rev-parse HEAD)
+        local commit_date=$(git log -1 --format=%cd --date=short)
+        
+        print_info "Checked out tag: ${GIT_TAG}"
+        print_info "Commit: ${commit_hash}"
+        print_info "Date: ${commit_date}"
+    fi
 }
 
 # Create source packages
 create_source_packages() {
+    if [ "$LOCAL_BUILD" = "true" ]; then
+        print_info "================================================"
+        print_info "Skipping source package creation for local build"
+        print_info "================================================"
+        return
+    fi
+
     print_info "======================================"
     print_info "Creating Source Packages"
     print_info "======================================"
@@ -197,7 +315,7 @@ check_prerequisites() {
     
     # Check if Docker is running
     if ! docker info &> /dev/null; then
-        print_error "Docker is not running. Please start Docker first."
+        print_error "Docker is not running or a group is missing. Please start Docker first and make sure you are in the docker group."
         exit 1
     fi
     
@@ -215,7 +333,8 @@ check_prerequisites() {
 setup_build_dirs() {
     print_info "Setting up build directories..."
     mkdir -p "${BUILD_DIR}"
-    mkdir -p "${BUILD_DIR}/binaries/linux"
+    mkdir -p "${BUILD_DIR}/binaries/linux-ubuntu20"
+    mkdir -p "${BUILD_DIR}/binaries/linux-ubuntu24"
     mkdir -p "${BUILD_DIR}/binaries/windows"
     mkdir -p "${BUILD_DIR}/tarballs"
     mkdir -p "${BUILD_DIR}/source"
@@ -235,25 +354,20 @@ setup_build_dirs() {
     print_info "Build directories created at: ${BUILD_DIR}"
 }
 
-# Build Linux binaries
-build_linux_binaries() {
+# Build Linux binaries (Ubuntu 20.04 - Maximum Compatibility)
+build_linux_ubuntu20_binaries() {
     print_info "======================================"
-    print_info "Building Linux Binaries"
+    print_info "Building Linux Binaries (Ubuntu 20.04)"
+    print_info "Maximum Compatibility: Ubuntu 18.04+"
     print_info "======================================"
     
-    local dockerfile="${BUILD_DIR}/Dockerfile.linux"
-    local image_name="rincoin-builder:linux"
-    
-    # Check if we should rebuild the image
-    if [ "$CLEAN_BUILD" = "true" ]; then
-        print_info "Clean build requested - removing existing Docker image..."
-        docker rmi "$image_name" 2>/dev/null || true
-    fi
+    local dockerfile="${BUILD_DIR}/Dockerfile.linux-ubuntu20"
+    local image_name="rincoin-builder:linux-ubuntu20"
     
     # Check if image already exists
     if docker image inspect "$image_name" >/dev/null 2>&1; then
         print_info "Using existing Docker image: $image_name"
-        print_info "(Use --clean flag to rebuild)"
+        print_info "(Use --clean-all flag to rebuild Docker images)"
     else
         print_info "Building new Docker image..."
     
@@ -271,6 +385,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     bsdmainutils \
     python3 \
+    cmake \
     libssl-dev \
     libevent-dev \
     libboost-system-dev \
@@ -287,6 +402,9 @@ RUN apt-get update && apt-get install -y \
     qttools5-dev \
     qttools5-dev-tools \
     libqrencode-dev \
+    curl \
+    wget \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -313,27 +431,55 @@ DOCKERFILE_END
             cp -r /source /build/rincoin
             cd /build/rincoin
             
+            # Setup depends cache directories
+            mkdir -p depends/sources depends/built
+            
+            # Link cache directories (if they have content, use them)
+            if [ -d "/depends_sources_cache" ]; then
+                cp -r /depends_sources_cache/* depends/sources/ 2>/dev/null || true
+            fi
+            
+            if [ -d "/depends_built_cache" ]; then
+                cp -r /depends_built_cache/* depends/built/ 2>/dev/null || true
+            fi
+            
+            # Build dependencies for Linux (this creates static builds)
+            cd depends
+            make -j$(nproc) HOST=x86_64-pc-linux-gnu
+            
+            # Copy back to cache for next build
+            cp -r sources/* /depends_sources_cache/ 2>/dev/null || true
+            cp -r built/* /depends_built_cache/ 2>/dev/null || true
+            
+            cd ..
+            
             ./autogen.sh
             
-            ./configure \
+            # Use depends-built libraries (all static)
+            CONFIG_SITE=$PWD/depends/x86_64-pc-linux-gnu/share/config.site ./configure \
                 BDB_LIBS="-L/db4/lib -ldb_cxx-4.8" \
                 BDB_CFLAGS="-I/db4/include" \
-                --prefix=/usr/local \
+                --prefix=/ \
                 --disable-tests \
                 --disable-bench \
                 --enable-reduce-exports \
-                LDFLAGS="-static-libstdc++" \
                 --with-incompatible-bdb=no
             
             make -j$(nproc)
             strip src/rincoind src/rincoin-cli src/rincoin-tx src/rincoin-wallet src/qt/rincoin-qt || true
             
+            echo "=== Linux binary sizes after stripping ==="
+            ls -lh src/rincoind src/rincoin-cli src/rincoin-tx src/rincoin-wallet src/qt/rincoin-qt
+            
+            echo "=== Checking Linux binary dependencies ==="
+            ldd src/rincoind || echo "Static binary (no dependencies)"
+            
             # Copy binaries
-            cp src/rincoind /output/binaries/linux/
-            cp src/rincoin-cli /output/binaries/linux/
-            cp src/rincoin-tx /output/binaries/linux/
-            cp src/rincoin-wallet /output/binaries/linux/
-            cp src/qt/rincoin-qt /output/binaries/linux/
+            cp src/rincoind /output/binaries/linux-ubuntu20/
+            cp src/rincoin-cli /output/binaries/linux-ubuntu20/
+            cp src/rincoin-tx /output/binaries/linux-ubuntu20/
+            cp src/rincoin-wallet /output/binaries/linux-ubuntu20/
+            cp src/qt/rincoin-qt /output/binaries/linux-ubuntu20/
             
             # Create tarball
             mkdir -p /tmp/rincoin-'"${VERSION}"'/bin
@@ -341,37 +487,188 @@ DOCKERFILE_END
             cd /tmp
             tar czf /output/tarballs/rincoin-'"${VERSION}"'-x86_64-linux-gnu.tar.gz rincoin-'"${VERSION}"'/
         ' || {
-        print_error "Linux build failed"
+        print_error "Linux Ubuntu 20.04 build failed"
+        
+        # Copy config.log for debugging
+        if [ -f "${SOURCE_DIR}/config.log" ]; then
+            print_info "Copying config.log to ${BUILD_DIR}/config.log.linux-ubuntu20"
+            cp "${SOURCE_DIR}/config.log" "${BUILD_DIR}/config.log.linux-ubuntu20"
+            print_info "Check ${BUILD_DIR}/config.log.linux-ubuntu20 for details"
+        fi
+        
         return 1
     }
     
-    print_info "Linux binaries built successfully!"
+    print_info "Linux Ubuntu 20.04 binaries built successfully!"
 }
 
-# Build Windows binaries
+# Build Linux binaries (Ubuntu 24.04 - Modern Performance)
+build_linux_ubuntu24_binaries() {
+    print_info "======================================"
+    print_info "Building Linux Binaries (Ubuntu 24.04)"
+    print_info "Modern Performance: Ubuntu 24.04+"
+    print_info "======================================"
+    
+    local dockerfile="${BUILD_DIR}/Dockerfile.linux-ubuntu24"
+    local image_name="rincoin-builder:linux-ubuntu24"
+    
+    # Check if image already exists
+    if docker image inspect "$image_name" >/dev/null 2>&1; then
+        print_info "Using existing Docker image: $image_name"
+        print_info "(Use --clean-all flag to rebuild Docker images)"
+    else
+        print_info "Building new Docker image..."
+    
+    cat > "$dockerfile" << 'DOCKERFILE_END'
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libtool \
+    autotools-dev \
+    automake \
+    pkg-config \
+    bsdmainutils \
+    python3 \
+    cmake \
+    libssl-dev \
+    libevent-dev \
+    libboost-system-dev \
+    libboost-filesystem-dev \
+    libboost-test-dev \
+    libboost-thread-dev \
+    libfmt-dev \
+    libminiupnpc-dev \
+    libzmq3-dev \
+    libsqlite3-dev \
+    libqt5gui5 \
+    libqt5core5a \
+    libqt5dbus5 \
+    qttools5-dev \
+    qttools5-dev-tools \
+    libqrencode-dev \
+    curl \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+DOCKERFILE_END
+
+        docker build -t "$image_name" -f "$dockerfile" "${BUILD_DIR}" || {
+            print_error "Failed to build Linux Ubuntu 24.04 Docker image"
+            return 1
+        }
+    fi
+    
+    print_info "Compiling Rincoin for Linux (Ubuntu 24.04)..."
+    
+    docker run --rm \
+        -v "${SOURCE_DIR}:/source:ro" \
+        -v "${BDB_PREFIX}:/db4:ro" \
+        -v "${BUILD_DIR}:/output" \
+        -v "${DEPENDS_SOURCES_CACHE}:/depends_sources_cache" \
+        -v "${DEPENDS_BUILT_CACHE}:/depends_built_cache" \
+        -e "VERSION=${VERSION}" \
+        "$image_name" \
+        bash -c '
+            set -e
+            cp -r /source /build/rincoin
+            cd /build/rincoin
+            
+            # Setup depends cache directories
+            mkdir -p depends/sources depends/built
+            
+            # Link cache directories (if they have content, use them)
+            if [ -d "/depends_sources_cache" ]; then
+                cp -r /depends_sources_cache/* depends/sources/ 2>/dev/null || true
+            fi
+            
+            if [ -d "/depends_built_cache" ]; then
+                cp -r /depends_built_cache/* depends/built/ 2>/dev/null || true
+            fi
+            
+            # Build dependencies for Linux (this creates static builds)
+            cd depends
+            make -j$(nproc) HOST=x86_64-pc-linux-gnu
+            
+            # Copy back to cache for next build
+            cp -r sources/* /depends_sources_cache/ 2>/dev/null || true
+            cp -r built/* /depends_built_cache/ 2>/dev/null || true
+            
+            cd ..
+            
+            ./autogen.sh
+            
+            # Use depends-built libraries (all static)
+            CONFIG_SITE=$PWD/depends/x86_64-pc-linux-gnu/share/config.site ./configure \
+                BDB_LIBS="-L/db4/lib -ldb_cxx-4.8" \
+                BDB_CFLAGS="-I/db4/include" \
+                --prefix=/ \
+                --disable-tests \
+                --disable-bench \
+                --enable-reduce-exports \
+                --with-incompatible-bdb=no
+            
+            make -j$(nproc)
+            strip src/rincoind src/rincoin-cli src/rincoin-tx src/rincoin-wallet src/qt/rincoin-qt || true
+            
+            echo "=== Linux binary sizes after stripping ==="
+            ls -lh src/rincoind src/rincoin-cli src/rincoin-tx src/rincoin-wallet src/qt/rincoin-qt
+            
+            echo "=== Checking Linux binary dependencies ==="
+            ldd src/rincoind || echo "Static binary (no dependencies)"
+            
+            # Copy binaries
+            cp src/rincoind /output/binaries/linux-ubuntu24/
+            cp src/rincoin-cli /output/binaries/linux-ubuntu24/
+            cp src/rincoin-tx /output/binaries/linux-ubuntu24/
+            cp src/rincoin-wallet /output/binaries/linux-ubuntu24/
+            cp src/qt/rincoin-qt /output/binaries/linux-ubuntu24/
+            
+            # Create tarball
+            mkdir -p /tmp/rincoin-'"${VERSION}"'/bin
+            cp src/rincoind src/rincoin-cli src/rincoin-tx src/rincoin-wallet src/qt/rincoin-qt /tmp/rincoin-'"${VERSION}"'/bin/
+            cd /tmp
+            tar czf /output/tarballs/rincoin-'"${VERSION}"'-x86_64-linux-gnu-ubuntu24.tar.gz rincoin-'"${VERSION}"'/
+        ' || {
+        print_error "Linux Ubuntu 24.04 build failed"
+        
+        # Copy config.log for debugging
+        if [ -f "${SOURCE_DIR}/config.log" ]; then
+            print_info "Copying config.log to ${BUILD_DIR}/config.log.linux-ubuntu24"
+            cp "${SOURCE_DIR}/config.log" "${BUILD_DIR}/config.log.linux-ubuntu24"
+            print_info "Check ${BUILD_DIR}/config.log.linux-ubuntu24 for details"
+        fi
+        
+        return 1
+    }
+    
+    print_info "Linux Ubuntu 24.04 binaries built successfully!"
+}
+
+# Build Windows binaries (on Ubuntu 24.04 for faster builds)
 build_windows_binaries() {
     print_info "======================================"
     print_info "Building Windows Binaries (Win10 x64+)"
+    print_info "Cross-compiled on Ubuntu 24.04"
     print_info "======================================"
     
     local dockerfile="${BUILD_DIR}/Dockerfile.windows"
     local image_name="rincoin-builder:windows"
     
-    # Check if we should rebuild the image
-    if [ "$CLEAN_BUILD" = "true" ]; then
-        print_info "Clean build requested - removing existing Docker image..."
-        docker rmi "$image_name" 2>/dev/null || true
-    fi
-    
     # Check if image already exists
     if docker image inspect "$image_name" >/dev/null 2>&1; then
         print_info "Using existing Docker image: $image_name"
-        print_info "(Use --clean flag to rebuild)"
+        print_info "(Use --clean-all flag to rebuild Docker images)"
     else
         print_info "Building new Docker image..."
     
     cat > "$dockerfile" << 'DOCKERFILE_END'
-FROM ubuntu:20.04
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
@@ -393,6 +690,8 @@ RUN apt-get update && apt-get install -y \
     mingw-w64-tools \
     nsis \
     zip \
+    wget \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Use posix variant for threading support
@@ -459,8 +758,15 @@ DOCKERFILE_END
             
             make -j$(nproc)
             
-            # Strip Windows binaries
-            x86_64-w64-mingw32-strip src/rincoind.exe src/rincoin-cli.exe src/rincoin-tx.exe src/rincoin-wallet.exe src/qt/rincoin-qt.exe || true
+            # Strip Windows binaries and show sizes
+            echo "=== Stripping Windows binaries ==="
+            x86_64-w64-mingw32-strip --strip-all src/rincoind.exe src/rincoin-cli.exe src/rincoin-tx.exe src/rincoin-wallet.exe src/qt/rincoin-qt.exe || true
+            
+            echo "=== Windows binary sizes after stripping ==="
+            ls -lh src/rincoind.exe src/rincoin-cli.exe src/rincoin-tx.exe src/rincoin-wallet.exe src/qt/rincoin-qt.exe
+            
+            echo "=== Checking Windows binary dependencies ==="
+            x86_64-w64-mingw32-objdump -x src/rincoind.exe | grep "DLL Name:" || echo "No DLL dependencies found (fully static)"
             
             # Copy binaries
             mkdir -p /output/binaries/windows
@@ -478,6 +784,14 @@ DOCKERFILE_END
             zip -r /output/tarballs/rincoin-'"${VERSION}"'-win64.zip rincoin-'"${VERSION}"'/
         ' || {
         print_error "Windows build failed"
+        
+        # Copy config.log for debugging
+        if [ -f "${SOURCE_DIR}/config.log" ]; then
+            print_info "Copying config.log to ${BUILD_DIR}/config.log.windows"
+            cp "${SOURCE_DIR}/config.log" "${BUILD_DIR}/config.log.windows"
+            print_info "Check ${BUILD_DIR}/config.log.windows for details"
+        fi
+        
         return 1
     }
     
@@ -679,7 +993,8 @@ main() {
     clone_and_checkout
     setup_build_dirs
     create_source_packages
-    build_linux_binaries
+    build_linux_ubuntu20_binaries
+    build_linux_ubuntu24_binaries
     build_windows_binaries
     create_checksums
     create_release_info
@@ -692,11 +1007,12 @@ main() {
     print_info "  ${BUILD_DIR}"
     echo ""
     print_info "Contents:"
-    print_info "  - source/             : Source code archives"
-    print_info "  - binaries/linux/     : Linux binaries"
-    print_info "  - binaries/windows/   : Windows binaries"
-    print_info "  - tarballs/           : Distribution archives"
-    print_info "  - README.txt          : Release documentation"
+    print_info "  - source/                 : Source code archives"
+    print_info "  - binaries/linux-ubuntu20/: Linux binaries (Ubuntu 18.04+, max compatibility)"
+    print_info "  - binaries/linux-ubuntu24/: Linux binaries (Ubuntu 24.04+, modern performance)"
+    print_info "  - binaries/windows/       : Windows binaries (Windows 10+)"
+    print_info "  - tarballs/               : Distribution archives"
+    print_info "  - README.txt              : Release documentation"
     echo ""
     print_info "Next steps:"
     print_info "  1. Test binaries on target platforms"

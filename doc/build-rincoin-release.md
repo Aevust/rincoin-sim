@@ -5,20 +5,66 @@ This guide explains how to build official release binaries for Rincoin using the
 ## Overview
 
 The `contrib/build_release.sh` script automates the process of building release binaries for multiple platforms:
-- **Linux** (x86_64) - Compatible with Ubuntu 20.04+, Debian 11+, RHEL 8+
-- **Windows** (x64) - Compatible with Windows 10 and Windows 11
+- **Linux (Ubuntu 20.04)** - Maximum compatibility: Ubuntu 18.04+, Debian 10+, RHEL 8+
+- **Linux (Ubuntu 24.04)** - Modern performance: Ubuntu 24.04+, Debian 12+
+- **Windows (x64)** - Windows 10 and Windows 11
 
 The script uses Docker to create reproducible builds in isolated environments and supports build caching for faster subsequent builds.
+
+## Build Variants
+
+### Linux Ubuntu 20.04 (Maximum Compatibility)
+- Built on Ubuntu 20.04 with glibc 2.31
+- Compatible with Ubuntu 18.04+, Debian 10+, RHEL 8+
+- Static linking of all dependencies except glibc
+- Broadest compatibility for deployment on older systems
+- **Package**: `rincoin-VERSION-x86_64-linux-gnu.tar.gz`
+
+### Linux Ubuntu 24.04 (Modern Performance)  
+- Built on Ubuntu 24.04 with glibc 2.39 and GCC 13
+- Compatible with Ubuntu 24.04+, Debian 12+
+- 5-15% performance improvement for compute-intensive operations
+- Modern compiler optimizations and security features
+- **Package**: `rincoin-VERSION-x86_64-linux-gnu-ubuntu24.tar.gz`
+
+### Windows x64
+- Cross-compiled on Ubuntu 24.04 using MinGW
+- Compatible with Windows 10 and Windows 11
+- Fully static binaries with no external DLL dependencies
+- **Package**: `rincoin-VERSION-win64.zip`
+
+## Choosing the Right Build
+
+### For Linux Users
+
+**Use Ubuntu 20.04 build if:**
+- Deploying on Ubuntu 18.04, 20.04, 22.04, or older Debian/RHEL systems
+- Maximum compatibility is required
+- Running on VPS providers with older OS versions
+- You're unsure which to choose (safest option)
+
+**Use Ubuntu 24.04 build if:**
+- Running Ubuntu 24.04+ or Debian 12+
+- Want 5-15% better performance for Argon2 hashing
+- Running on modern hardware with latest OS
+- Need modern security features and compiler optimizations
+
+**Not sure?** Use the Ubuntu 20.04 build - it works everywhere the Ubuntu 24.04 build does, plus older systems.
+
+### For Windows Users
+
+Use the provided `win64.zip` - compatible with both Windows 10 and Windows 11.
 
 ## Features
 
 - ✅ Git-based builds from version tags
 - ✅ Automatic source code packaging (tar.gz and zip)
+- ✅ Multi-variant Linux builds (Ubuntu 20.04 and 24.04)
 - ✅ Cross-platform compilation (Linux and Windows)
 - ✅ Build artifact caching for faster rebuilds
 - ✅ SHA256 checksum generation
 - ✅ Comprehensive release documentation
-- ✅ Static C++ library linking for maximum compatibility
+- ✅ Static library linking for maximum portability
 
 ## Prerequisites
 
@@ -117,24 +163,49 @@ cd /path/to/rincoin
 ./contrib/build_release.sh v1.0.1 https://github.com/YourFork/rincoin.git
 ```
 
-#### Clean Build (Force Rebuild)
+#### Clean Build (Clear Dependency Caches)
 
-Remove all cached artifacts and rebuild from scratch:
+Clear dependency download and build caches, but keep Docker images:
 
 ```bash
 ./contrib/build_release.sh v1.0.1 --clean
 ```
 
 This will:
-- Remove Docker images
-- Clear dependency caches
-- Start fresh build
+- Clear dependency download caches (~5-10 min savings on next build)
+- Clear built dependency caches (~20-40 min savings on next build)
+- **Keep Docker images** (preserves ~5-10 min of apt updates)
+
+**Use when:** You want a fresh dependency build but don't want to rebuild Docker images.
+
+#### Full Clean Build (Rebuild Everything)
+
+Remove all cached artifacts including Docker images:
+
+```bash
+./contrib/build_release.sh v1.0.1 --clean-all
+```
+
+This will:
+- Remove all Docker images (forces complete rebuild)
+- Clear all dependency caches
+- Rebuild from absolute scratch
+
+**Use when:** You suspect Docker image corruption or want to test a completely fresh build.
 
 #### Combined Options
 
 ```bash
 ./contrib/build_release.sh v1.0.2 https://github.com/Rin-coin/rincoin.git --clean
 ```
+
+### Clean Flags Quick Reference
+
+| Flag | Clears Caches | Rebuilds Docker Images | Use Case |
+|------|---------------|------------------------|----------|
+| (none) | No | No | Fast iterative builds |
+| `--clean` | Yes | **No** | Fresh dependency build, keep images |
+| `--clean-all` | Yes | Yes | Complete rebuild from scratch |
 
 ## Build Process
 
@@ -145,20 +216,32 @@ The script performs the following steps:
 - Clones repository at specified tag
 - Creates source packages (tar.gz and zip)
 
-### 2. Linux Build (Ubuntu 20.04 base)
-- Creates/reuses Docker image with build tools
-- Compiles binaries with static libstdc++
+### 2. Linux Ubuntu 20.04 Build (Maximum Compatibility)
+- Creates/reuses Docker image based on Ubuntu 20.04
+- Builds dependencies via depends system (Boost, Qt5, etc.)
+- Compiles binaries with static linking (except glibc 2.31)
 - Generates: `rincoind`, `rincoin-cli`, `rincoin-tx`, `rincoin-wallet`, `rincoin-qt`
-- Creates distribution tarball
+- Creates distribution tarball: `rincoin-VERSION-x86_64-linux-gnu.tar.gz`
+- Compatible with: Ubuntu 18.04+, Debian 10+, RHEL 8+
 
-### 3. Windows Build (MinGW cross-compilation)
-- Creates/reuses Docker image with MinGW toolchain
+### 3. Linux Ubuntu 24.04 Build (Modern Performance)
+- Creates/reuses Docker image based on Ubuntu 24.04
+- Builds dependencies via depends system with GCC 13
+- Compiles binaries with modern optimizations
+- Generates: `rincoind`, `rincoin-cli`, `rincoin-tx`, `rincoin-wallet`, `rincoin-qt`
+- Creates distribution tarball: `rincoin-VERSION-x86_64-linux-gnu-ubuntu24.tar.gz`
+- Compatible with: Ubuntu 24.04+, Debian 12+
+- ~5-15% performance improvement over Ubuntu 20 build
+
+### 4. Windows Build (MinGW cross-compilation)
+- Creates/reuses Docker image based on Ubuntu 24.04 with MinGW toolchain
 - Builds Windows dependencies via depends system
-- Compiles Windows binaries
+- Compiles Windows binaries with full static linking
 - Generates: `*.exe` files
-- Creates distribution zip
+- Creates distribution zip: `rincoin-VERSION-win64.zip`
+- Compatible with: Windows 10 and Windows 11
 
-### 4. Finalization
+### 5. Finalization
 - Generates SHA256 checksums for all artifacts
 - Creates release documentation (README.txt)
 - Organizes output in release-builds directory
@@ -170,7 +253,8 @@ The script implements intelligent caching to speed up subsequent builds:
 ### Cached Artifacts
 
 1. **Docker Images** (`~2-5 minutes saved`)
-   - `rincoin-builder:linux`
+   - `rincoin-builder:linux-ubuntu20`
+   - `rincoin-builder:linux-ubuntu24`
    - `rincoin-builder:windows`
 
 2. **Dependency Downloads** (`~5-10 minutes saved`)
@@ -179,15 +263,16 @@ The script implements intelligent caching to speed up subsequent builds:
 
 3. **Built Dependencies** (`~20-40 minutes saved`)
    - Location: `.build-cache/depends-built/`
-   - Cached: Compiled Windows dependencies
+   - Cached: Compiled dependencies for all platforms
 
 ### Build Times
 
 | Build Type | First Build | Cached Build | Savings |
 |------------|-------------|--------------|---------|
-| Linux only | ~15 min | ~8 min | ~50% |
+| Linux Ubuntu 20 only | ~25 min | ~10 min | ~60% |
+| Linux Ubuntu 24 only | ~25 min | ~10 min | ~60% |
 | Windows only | ~60 min | ~15 min | ~75% |
-| Both platforms | ~75 min | ~20 min | ~73% |
+| All three platforms | ~110 min | ~35 min | ~68% |
 
 ### Managing Cache
 
@@ -196,14 +281,19 @@ The script implements intelligent caching to speed up subsequent builds:
 du -sh .build-cache/
 ```
 
+**Clear dependency caches only (keeps Docker images):**
+```bash
+./contrib/build_release.sh v1.0.1 --clean
+```
+
+**Clear everything including Docker images:**
+```bash
+./contrib/build_release.sh v1.0.1 --clean-all
+```
+
 **Clear cache manually:**
 ```bash
 rm -rf .build-cache/
-```
-
-**Use --clean flag:**
-```bash
-./contrib/build_release.sh v1.0.1 --clean
 ```
 
 ## Output Structure
@@ -214,29 +304,37 @@ After a successful build, you'll find the following structure:
 release-builds/
 └── 1.0.1/
     ├── source/
-    │   ├── rincoin-1.0.1.tar.gz        # Source code (tar.gz)
-    │   ├── rincoin-1.0.1.zip            # Source code (zip)
-    │   └── SHA256SUMS.txt                # Source checksums
+    │   ├── rincoin-1.0.1.tar.gz              # Source code (tar.gz)
+    │   ├── rincoin-1.0.1.zip                  # Source code (zip)
+    │   └── SHA256SUMS.txt                      # Source checksums
     ├── binaries/
-    │   ├── linux/
-    │   │   ├── rincoind                  # Linux daemon
-    │   │   ├── rincoin-cli               # Linux RPC client
-    │   │   ├── rincoin-tx                # Linux transaction tool
-    │   │   ├── rincoin-wallet            # Linux wallet tool
-    │   │   ├── rincoin-qt                # Linux GUI
-    │   │   └── SHA256SUMS.txt            # Binary checksums
+    │   ├── linux-ubuntu20/                     # Ubuntu 20.04 build (max compatibility)
+    │   │   ├── rincoind                        # Linux daemon
+    │   │   ├── rincoin-cli                     # Linux RPC client
+    │   │   ├── rincoin-tx                      # Linux transaction tool
+    │   │   ├── rincoin-wallet                  # Linux wallet tool
+    │   │   ├── rincoin-qt                      # Linux GUI
+    │   │   └── SHA256SUMS.txt                  # Binary checksums
+    │   ├── linux-ubuntu24/                     # Ubuntu 24.04 build (modern performance)
+    │   │   ├── rincoind                        # Linux daemon
+    │   │   ├── rincoin-cli                     # Linux RPC client
+    │   │   ├── rincoin-tx                      # Linux transaction tool
+    │   │   ├── rincoin-wallet                  # Linux wallet tool
+    │   │   ├── rincoin-qt                      # Linux GUI
+    │   │   └── SHA256SUMS.txt                  # Binary checksums
     │   └── windows/
-    │       ├── rincoind.exe              # Windows daemon
-    │       ├── rincoin-cli.exe           # Windows RPC client
-    │       ├── rincoin-tx.exe            # Windows transaction tool
-    │       ├── rincoin-wallet.exe        # Windows wallet tool
-    │       ├── rincoin-qt.exe            # Windows GUI
-    │       └── SHA256SUMS.txt            # Binary checksums
+    │       ├── rincoind.exe                    # Windows daemon
+    │       ├── rincoin-cli.exe                 # Windows RPC client
+    │       ├── rincoin-tx.exe                  # Windows transaction tool
+    │       ├── rincoin-wallet.exe              # Windows wallet tool
+    │       ├── rincoin-qt.exe                  # Windows GUI
+    │       └── SHA256SUMS.txt                  # Binary checksums
     ├── tarballs/
-    │   ├── rincoin-1.0.1-x86_64-linux-gnu.tar.gz   # Linux distribution
-    │   ├── rincoin-1.0.1-win64.zip                  # Windows distribution
-    │   └── SHA256SUMS.txt                            # Archive checksums
-    └── README.txt                                    # Release documentation
+    │   ├── rincoin-1.0.1-x86_64-linux-gnu.tar.gz          # Linux Ubuntu 20.04 distro
+    │   ├── rincoin-1.0.1-x86_64-linux-gnu-ubuntu24.tar.gz # Linux Ubuntu 24.04 distro
+    │   ├── rincoin-1.0.1-win64.zip                         # Windows distribution
+    │   └── SHA256SUMS.txt                                   # Archive checksums
+    └── README.txt                                           # Release documentation
 ```
 
 ## Verification
