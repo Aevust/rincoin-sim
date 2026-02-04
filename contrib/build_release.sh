@@ -133,9 +133,14 @@ print_error() {
 
 # Cleanup function
 cleanup() {
+    local exit_code=$?
     if [ -d "$TEMP_DIR" ]; then
-        print_info "Cleaning up temporary directory..."
-        rm -rf "$TEMP_DIR"
+        if [ $exit_code -eq 0 ]; then
+            print_info "Cleaning up temporary directory..."
+            rm -rf "$TEMP_DIR"
+        else
+            print_error "Build failed. Temporary directory preserved for debugging: $TEMP_DIR"
+        fi
     fi
 }
 
@@ -819,7 +824,10 @@ create_checksums() {
     cat SHA256SUMS.txt
     
     # Checksums for individual binaries
-    cd ../binaries/linux
+    cd ../binaries/linux-ubuntu20
+    sha256sum * > SHA256SUMS.txt 2>/dev/null || true
+    
+    cd ../binaries/linux-ubuntu24
     sha256sum * > SHA256SUMS.txt 2>/dev/null || true
     
     cd ../windows
