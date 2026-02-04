@@ -101,6 +101,9 @@ void CoinControlTreeWidget::mousePressEvent(QMouseEvent *event)
             
             // Set current item to move the visual focus/cursor to the clicked item
             setCurrentItem(clickedItem);
+            
+            // Update last clicked item so next shift+click uses this as the reference
+            m_lastClickedItem = clickedItem;
         }
         
         event->accept();
