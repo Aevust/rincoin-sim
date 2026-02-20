@@ -156,7 +156,8 @@ public:
         // service bits we want, but we should get them updated to support all service bits wanted by any
         // release ASAP to avoid it where possible.
         
-        vSeeds.emplace_back("seed.rincoin.org");  // official DNS seeder
+        vSeeds.emplace_back("seed.rincoin.net");  // official DNS seeder 1
+        vSeeds.emplace_back("seed.rincoin.org");  // official DNS seeder 2
 
         base58Prefixes[PUBKEY_ADDRESS] = {60};  // "R..."
         base58Prefixes[SCRIPT_ADDRESS] = {122}; // "r..."
