@@ -827,7 +827,7 @@ create_checksums() {
     cd ../binaries/linux-ubuntu20
     sha256sum * > SHA256SUMS.txt 2>/dev/null || true
     
-    cd ../binaries/linux-ubuntu24
+    cd ../linux-ubuntu24
     sha256sum * > SHA256SUMS.txt 2>/dev/null || true
     
     cd ../windows
