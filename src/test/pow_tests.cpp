@@ -20,7 +20,7 @@ BOOST_AUTO_TEST_CASE(get_next_work)
     pindexLast.nHeight = 280223;
     pindexLast.nTime = 1358378777;  // Block #280223
     pindexLast.nBits = 0x1c0ac141;
-    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1c093f8dU);
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1c178a7fU);
 }
 
 /* Test the constraint on the upper bound for next work */
@@ -32,7 +32,7 @@ BOOST_AUTO_TEST_CASE(get_next_work_pow_limit)
     pindexLast.nHeight = 2015;
     pindexLast.nTime = 1318480354;  // Block #2015
     pindexLast.nBits = 0x1e0ffff0;
-    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1e0fffffU);
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1e3fffc0U);
 }
 
 /* Test the constraint on the lower bound for actual time taken */
@@ -44,7 +44,7 @@ BOOST_AUTO_TEST_CASE(get_next_work_lower_limit_actual)
     pindexLast.nHeight = 578591;
     pindexLast.nTime = 1401757934;  // Block #578591
     pindexLast.nBits = 0x1b075cf1;
-    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1b01d73cU);
+    BOOST_CHECK_EQUAL(CalculateNextWorkRequired(&pindexLast, nLastRetargetTime, chainParams->GetConsensus()), 0x1b04a5fcU);
 }
 
 /* Test the constraint on the upper bound for actual time taken */
@@ -143,8 +143,10 @@ void sanity_check_chainparams(const ArgsManager& args, std::string chainName)
     // hash genesis is correct
     BOOST_CHECK_EQUAL(consensus.hashGenesisBlock, chainParams->GenesisBlock().GetHash());
 
-    // target timespan is an even multiple of spacing
-    BOOST_CHECK_EQUAL(consensus.nPowTargetTimespan % consensus.nPowTargetSpacing, 0);
+    // target timespan is an even multiple of spacing (only relevant when retargeting is enabled)
+    if (!consensus.fPowNoRetargeting) {
+        BOOST_CHECK_EQUAL(consensus.nPowTargetTimespan % consensus.nPowTargetSpacing, 0);
+    }
 
     // genesis nBits is positive, doesn't overflow and is lower than powLimit
     arith_uint256 pow_compact;

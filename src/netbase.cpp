@@ -107,8 +107,11 @@ bool static LookupIntern(const std::string& name, std::vector<CNetAddr>& vIP, un
     aiHint.ai_flags = fAllowLookup ? AI_ADDRCONFIG : AI_NUMERICHOST;
     struct addrinfo *aiRes = nullptr;
     int nErr = getaddrinfo(name.c_str(), nullptr, &aiHint, &aiRes);
-    if (nErr)
+    if (nErr) {
+        LogPrint(BCLog::NET, "getaddrinfo('%s') failed: %s (code %d)\n",
+                 name, gai_strerror(nErr), nErr);
         return false;
+    }
 
     // Traverse the linked list starting with aiTrav, add all non-internal
     // IPv4,v6 addresses to vIP while respecting nMaxSolutions.
