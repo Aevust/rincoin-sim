@@ -1757,6 +1757,9 @@ void CConnman::ThreadDNSAddressSeed()
     //   (done in ThreadOpenConnections)
     const std::chrono::seconds seeds_wait_time = (addrman.size() >= DNSSEEDS_DELAY_PEER_THRESHOLD ? DNSSEEDS_DELAY_MANY_PEERS : DNSSEEDS_DELAY_FEW_PEERS);
 
+    LogPrintf("DNS seeding: %d seeds to try, seeds_right_now=%d, addrman=%d\n",
+              seeds.size(), seeds_right_now, (int)addrman.size());
+
     for (const std::string& seed : seeds) {
         if (seeds_right_now == 0) {
             seeds_right_now += DNSSEEDS_TO_QUERY_AT_ONCE;
@@ -1782,9 +1785,9 @@ void CConnman::ThreadDNSAddressSeed()
                     if (nRelevant >= 2) {
                         if (found > 0) {
                             LogPrintf("%d addresses found from DNS seeds\n", found);
-                            LogPrintf("P2P peers available. Finished DNS seeding.\n");
+                            LogPrintf("P2P peers available (%d connected). Finished DNS seeding early — remaining seeds not queried.\n", nRelevant);
                         } else {
-                            LogPrintf("P2P peers available. Skipped DNS seeding.\n");
+                            LogPrintf("P2P peers available (%d connected). Skipped DNS seeding entirely — no seeds queried.\n", nRelevant);
                         }
                         return;
                     }
@@ -1804,18 +1807,28 @@ void CConnman::ThreadDNSAddressSeed()
 
         LogPrintf("Loading addresses from DNS seed %s\n", seed);
         if (HaveNameProxy()) {
+            LogPrintf("DNS seed %s: using name proxy, adding to addr-fetch queue\n", seed);
             AddAddrFetch(seed);
         } else {
             std::vector<CNetAddr> vIPs;
             std::vector<CAddress> vAdd;
             ServiceFlags requiredServiceBits = GetDesirableServiceFlags(NODE_NONE);
             std::string host = strprintf("x%x.%s", requiredServiceBits, seed);
+            LogPrintf("DNS seed %s: querying service-bit-filtered host '%s' (flags=0x%x)\n",
+                      seed, host, (unsigned int)requiredServiceBits);
             CNetAddr resolveSource;
             if (!resolveSource.SetInternal(host)) {
+                LogPrintf("DNS seed %s: SetInternal('%s') failed, skipping\n", seed, host);
                 continue;
             }
             unsigned int nMaxIPs = 256; // Limits number of IPs learned from a DNS seed
-            if (LookupHost(host, vIPs, nMaxIPs, true)) {
+            auto t_dns = std::chrono::steady_clock::now();
+            bool lookup_ok = LookupHost(host, vIPs, nMaxIPs, true);
+            auto dns_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - t_dns).count();
+            if (lookup_ok && !vIPs.empty()) {
+                LogPrintf("DNS seed %s: SUCCESS — resolved '%s' → %d IPs in %lldms\n",
+                          seed, host, vIPs.size(), dns_ms);
                 for (const CNetAddr& ip : vIPs) {
                     int nOneDay = 24*3600;
                     CAddress addr = CAddress(CService(ip, Params().GetDefaultPort()), requiredServiceBits);
@@ -1824,9 +1837,18 @@ void CConnman::ThreadDNSAddressSeed()
                     found++;
                 }
                 addrman.Add(vAdd, resolveSource);
+            } else if (lookup_ok && vIPs.empty()) {
+                // DNS resolved but returned zero usable addresses (all internal?)
+                LogPrintf("DNS seed %s: EMPTY — resolved '%s' OK but 0 usable IPs returned (%lldms). Falling back to addr-fetch of '%s'.\n",
+                          seed, host, dns_ms, seed);
+                AddAddrFetch(seed);
             } else {
-                // We now avoid directly using results from DNS Seeds which do not support service bit filtering,
-                // instead using them as a addrfetch to get nodes with our desired service bits.
+                // DNS resolution failed — seeder may not support service-bit filtering,
+                // or the hostname doesn't exist. Fall back to direct P2P addr-fetch.
+                LogPrintf("DNS seed %s: FAILED — could not resolve '%s' (%lldms). Possible causes: "
+                          "hostname doesn't exist, seeder doesn't whitelist flag 0x%x, or network error. "
+                          "Falling back to addr-fetch of '%s'.\n",
+                          seed, host, dns_ms, (unsigned int)requiredServiceBits, seed);
                 AddAddrFetch(seed);
             }
         }

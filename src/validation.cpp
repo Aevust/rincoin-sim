@@ -54,6 +54,7 @@
 
 #include <string>
 #include <thread>
+#include <future>
 #include <vector>
 #include <atomic>
 
@@ -3309,10 +3310,14 @@ void ResetBlockFailureFlags(CBlockIndex *pindex) {
 
 CBlockIndex* BlockManager::AddToBlockIndex(const CBlockHeader& block)
 {
+    return AddToBlockIndex(block, block.GetHash());
+}
+
+CBlockIndex* BlockManager::AddToBlockIndex(const CBlockHeader& block, const uint256& hash)
+{
     AssertLockHeld(cs_main);
 
     // Check for duplicate
-    uint256 hash = block.GetHash();
     BlockMap::iterator it = m_block_index.find(hash);
     if (it != m_block_index.end())
         return it->second;
@@ -3676,6 +3681,48 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
     return true;
 }
 
+/** Light contextual checks — everything EXCEPT the expensive DGW difficulty check.
+ *  Checks: checkpoints, timestamps, block version bits.
+ *  Separated out so that the DGW check can run in parallel across a whole batch.
+ */
+static bool ContextualCheckBlockHeaderLight(const CBlockHeader& block, BlockValidationState& state, const CChainParams& params, const CBlockIndex* pindexPrev, int64_t nAdjustedTime) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+{
+    assert(pindexPrev != nullptr);
+    const int nHeight = pindexPrev->nHeight + 1;
+    const Consensus::Params& consensusParams = params.GetConsensus();
+
+    // Check against checkpoints
+    if (fCheckpointsEnabled) {
+        CBlockIndex* pcheckpoint = GetLastCheckpoint(params.Checkpoints());
+        if (pcheckpoint && nHeight < pcheckpoint->nHeight) {
+            LogPrintf("ERROR: %s: forked chain older than last checkpoint (height %d)\n", __func__, nHeight);
+            return state.Invalid(BlockValidationResult::BLOCK_CHECKPOINT, "bad-fork-prior-to-checkpoint");
+        }
+    }
+
+    // Check timestamp against prev
+    if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast())
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "time-too-old", "block's timestamp is too early");
+
+    // Check timestamp
+    if (block.GetBlockTime() > nAdjustedTime + MAX_FUTURE_BLOCK_TIME)
+        return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "time-too-new", "block timestamp too far in the future");
+
+    // Reject outdated version blocks when 95% (75% on testnet) of the network has upgraded:
+    // check for version 2, 3 and 4 upgrades
+    if((block.nVersion < 2 && nHeight >= consensusParams.BIP34Height) ||
+       (block.nVersion < 3 && nHeight >= consensusParams.BIP66Height) ||
+       (block.nVersion < 4 && nHeight >= consensusParams.BIP65Height))
+            return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, strprintf("bad-version(0x%08x)", block.nVersion),
+                                 strprintf("rejected nVersion=0x%08x block", block.nVersion));
+
+    if (block.nVersion < VERSIONBITS_TOP_BITS && IsWitnessEnabled(pindexPrev, consensusParams))
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, strprintf("bad-version(0x%08x)", block.nVersion),
+                                 strprintf("rejected nVersion=0x%08x block", block.nVersion));
+
+    return true;
+}
+
 /** NOTE: This function is not currently invoked by ConnectBlock(), so we
  *  should consider upgrade issues if we change which consensus rules are
  *  enforced in this function (eg by adding a new consensus rule). See comment
@@ -3768,11 +3815,25 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     return true;
 }
 
+// Original signature — non-optimized path computes both hashes and forwards
 bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
 {
-    AssertLockHeld(cs_main);
-    // Check for duplicate
     uint256 hash = block.GetHash();
+    uint256 powHash = block.GetPoWHash();
+    return AcceptBlockHeader(block, state, chainparams, ppindex,
+                             hash, powHash,
+                             nullptr, nullptr, nullptr, nullptr, nullptr);
+}
+
+bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex,
+    const uint256& cached_hash, const uint256& cached_pow_hash,
+    int64_t* total_pow_check_us, int64_t* total_ctx_us, int64_t* total_add_us,
+    size_t* new_count, size_t* dup_count)
+{
+    AssertLockHeld(cs_main);
+    // Use the pre-computed block identity hash (eliminates redundant GetHash() call)
+    const uint256& hash = cached_hash;
+
     BlockMap::iterator miSelf = m_block_index.find(hash);
     CBlockIndex *pindex = nullptr;
     if (hash != chainparams.GetConsensus().hashGenesisBlock) {
@@ -3781,6 +3842,7 @@ bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationS
             pindex = miSelf->second;
             if (ppindex)
                 *ppindex = pindex;
+            if (dup_count) (*dup_count)++;
             if (pindex->nStatus & BLOCK_FAILED_MASK) {
                 LogPrintf("ERROR: %s: block %s is marked invalid\n", __func__, hash.ToString());
                 return state.Invalid(BlockValidationResult::BLOCK_CACHED_INVALID, "duplicate");
@@ -3788,10 +3850,16 @@ bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationS
             return true;
         }
 
-        if (!CheckBlockHeader(block, state, chainparams.GetConsensus())) {
-            LogPrint(BCLog::VALIDATION, "%s: Consensus::CheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
-            return false;
+        if (new_count) (*new_count)++;
+
+        // PoW check using pre-computed PoW hash (eliminates redundant GetPoWHash() call)
+        auto t2 = std::chrono::steady_clock::now();
+        if (!CheckProofOfWork(cached_pow_hash, block.nBits, chainparams.GetConsensus())) {
+            LogPrint(BCLog::VALIDATION, "%s: proof of work failed: %s\n", __func__, hash.ToString());
+            return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
         }
+        auto t3 = std::chrono::steady_clock::now();
+        if (total_pow_check_us) *total_pow_check_us += std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
 
         // Get prev block index
         CBlockIndex* pindexPrev = nullptr;
@@ -3805,8 +3873,11 @@ bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationS
             LogPrintf("ERROR: %s: prev block invalid\n", __func__);
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_PREV, "bad-prevblk");
         }
+        auto t4 = std::chrono::steady_clock::now();
         if (!ContextualCheckBlockHeader(block, state, chainparams, pindexPrev, GetAdjustedTime()))
             return error("%s: Consensus::ContextualCheckBlockHeader: %s, %s", __func__, hash.ToString(), state.ToString());
+        auto t5 = std::chrono::steady_clock::now();
+        if (total_ctx_us) *total_ctx_us += std::chrono::duration_cast<std::chrono::microseconds>(t5 - t4).count();
 
         /* Determine if this block descends from any block which has been found
          * invalid (m_failed_blocks), then mark pindexPrev and any blocks between
@@ -3847,8 +3918,12 @@ bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationS
             }
         }
     }
-    if (pindex == nullptr)
-        pindex = AddToBlockIndex(block);
+    if (pindex == nullptr) {
+        auto ta0 = std::chrono::steady_clock::now();
+        pindex = AddToBlockIndex(block, hash);
+        auto ta1 = std::chrono::steady_clock::now();
+        if (total_add_us) *total_add_us += std::chrono::duration_cast<std::chrono::microseconds>(ta1 - ta0).count();
+    }
 
     if (ppindex)
         *ppindex = pindex;
@@ -3856,24 +3931,230 @@ bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationS
     return true;
 }
 
-// Exposed wrapper for AcceptBlockHeader
+// === Batch-parallel hash pre-computation ===
+// Pre-compute GetHash() and GetPoWHash() for all headers using a thread pool.
+// Each thread processes a non-overlapping slice; results go into separate vectors,
+// NOT into mutable CBlockHeader fields (unlike the old sync-improvements branch).
+// This is safe because GetHash()/GetPoWHash() are const, use stack/heap-local
+// state only, and each thread writes to disjoint vector indices.
+void PrecomputeHeaderHashes(const std::vector<CBlockHeader>& headers,
+                           std::vector<uint256>& hashes,
+                           std::vector<uint256>& powHashes)
+{
+    const size_t N = headers.size();
+    hashes.resize(N);
+    powHashes.resize(N);
+    if (N == 0) return;
+
+    unsigned int nThreads = std::max(1u, (unsigned int)std::thread::hardware_concurrency());
+    if (nThreads > N) nThreads = (unsigned int)N;
+
+    std::vector<std::thread> threads;
+    threads.reserve(nThreads);
+
+    auto worker = [&](size_t start, size_t end) {
+        for (size_t i = start; i < end; i++) {
+            hashes[i] = headers[i].GetHash();
+            powHashes[i] = headers[i].GetPoWHash();
+        }
+    };
+
+    size_t chunk = (N + nThreads - 1) / nThreads;
+    for (unsigned int t = 0; t < nThreads; t++) {
+        size_t start = t * chunk;
+        size_t end = std::min(start + chunk, N);
+        if (start < end) {
+            threads.emplace_back(worker, start, end);
+        }
+    }
+
+    for (auto& t : threads) t.join();
+}
+
+// Original signature — pre-computes hashes then forwards to the overload
 bool ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex)
+{
+    std::vector<uint256> hashes;
+    std::vector<uint256> powHashes;
+    PrecomputeHeaderHashes(headers, hashes, powHashes);
+    return ProcessNewBlockHeaders(headers, state, chainparams, ppindex, hashes, powHashes);
+}
+
+// Overload accepting pre-computed hashes — two-phase parallel batch validation.
+// Phase 1 (sequential): dedup, PoW, light ctx checks (timestamps/versions/checkpoints),
+//                        failed-ancestor check, AddToBlockIndex.  ~5µs/header.
+// Phase 2 (parallel):   DGW difficulty check across all new headers using thread pool.
+//                        GetNextWorkRequired only reads the pprev chain (stable under
+//                        cs_main held by the calling thread).  ~275µs*N/threads.
+// If any DGW check fails, the first failing header and all subsequent are marked invalid.
+bool ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex,
+    const std::vector<uint256>& hashes, const std::vector<uint256>& powHashes)
 {
     AssertLockNotHeld(cs_main);
     {
         LOCK(cs_main);
-        for (const CBlockHeader& header : headers) {
-            CBlockIndex *pindex = nullptr; // Use a temp pindex instead of ppindex to avoid a const_cast
-            bool accepted = m_blockman.AcceptBlockHeader(
-                header, state, chainparams, &pindex);
-            ::ChainstateActive().CheckBlockIndex(chainparams.GetConsensus());
+        auto batch_start = std::chrono::steady_clock::now();
+        size_t hdr_count = headers.size();
+        size_t new_count = 0;
+        size_t dup_count = 0;
 
-            if (!accepted) {
-                return false;
+        // Track new (non-duplicate) headers that need parallel DGW check
+        struct NewHeaderEntry {
+            size_t idx;            // index into headers[] / hashes[]
+            CBlockIndex* pindex;   // just-created block index entry
+            CBlockIndex* pindexPrev; // parent block index entry
+        };
+        std::vector<NewHeaderEntry> new_hdrs;
+        new_hdrs.reserve(hdr_count);
+
+        // === PHASE 1: Sequential — dedup, PoW, light ctx, add to index ===
+        int64_t adjustedTime = GetAdjustedTime();
+        auto t_phase1 = std::chrono::steady_clock::now();
+
+        for (size_t i = 0; i < hdr_count; i++) {
+            const CBlockHeader& header = headers[i];
+            const uint256& hash = hashes[i];
+
+            // Dedup check
+            BlockMap::iterator miSelf = m_blockman.m_block_index.find(hash);
+            if (miSelf != m_blockman.m_block_index.end()) {
+                CBlockIndex* pindex = miSelf->second;
+                if (pindex->nStatus & BLOCK_FAILED_MASK) {
+                    LogPrintf("ERROR: %s: block %s is marked invalid\n", __func__, hash.ToString());
+                    return state.Invalid(BlockValidationResult::BLOCK_CACHED_INVALID, "duplicate");
+                }
+                if (ppindex) *ppindex = pindex;
+                dup_count++;
+                continue;
             }
-            if (ppindex) {
-                *ppindex = pindex;
+
+            new_count++;
+
+            // PoW check (pre-computed hash, ~0µs)
+            if (!CheckProofOfWork(powHashes[i], header.nBits, chainparams.GetConsensus())) {
+                LogPrint(BCLog::VALIDATION, "%s: proof of work failed: %s\n", __func__, hash.ToString());
+                return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "high-hash", "proof of work failed");
             }
+
+            // Find prev block
+            CBlockIndex* pindexPrev = nullptr;
+            BlockMap::iterator mi = m_blockman.m_block_index.find(header.hashPrevBlock);
+            if (mi == m_blockman.m_block_index.end()) {
+                LogPrintf("ERROR: %s: prev block not found\n", __func__);
+                return state.Invalid(BlockValidationResult::BLOCK_MISSING_PREV, "prev-blk-not-found");
+            }
+            pindexPrev = mi->second;
+            if (pindexPrev->nStatus & BLOCK_FAILED_MASK) {
+                LogPrintf("ERROR: %s: prev block invalid\n", __func__);
+                return state.Invalid(BlockValidationResult::BLOCK_INVALID_PREV, "bad-prevblk");
+            }
+
+            // Light contextual checks (checkpoints, timestamps, version bits)
+            // — the expensive DGW check is deferred to parallel phase 2
+            if (!ContextualCheckBlockHeaderLight(header, state, chainparams, pindexPrev, adjustedTime))
+                return error("%s: ContextualCheckBlockHeaderLight: %s, %s", __func__, hash.ToString(), state.ToString());
+
+            // Failed ancestor check
+            if (!pindexPrev->IsValid(BLOCK_VALID_SCRIPTS)) {
+                for (const CBlockIndex* failedit : m_blockman.m_failed_blocks) {
+                    if (pindexPrev->GetAncestor(failedit->nHeight) == failedit) {
+                        assert(failedit->nStatus & BLOCK_FAILED_VALID);
+                        CBlockIndex* invalid_walk = pindexPrev;
+                        while (invalid_walk != failedit) {
+                            invalid_walk->nStatus |= BLOCK_FAILED_CHILD;
+                            setDirtyBlockIndex.insert(invalid_walk);
+                            invalid_walk = invalid_walk->pprev;
+                        }
+                        LogPrintf("ERROR: %s: prev block invalid\n", __func__);
+                        return state.Invalid(BlockValidationResult::BLOCK_INVALID_PREV, "bad-prevblk");
+                    }
+                }
+            }
+
+            // Add to block index (fast, ~1.5µs — creates CBlockIndex with pprev chain)
+            CBlockIndex* pindex = m_blockman.AddToBlockIndex(header, hash);
+            if (ppindex) *ppindex = pindex;
+
+            new_hdrs.push_back({i, pindex, pindexPrev});
+        }
+
+        auto t_phase1_end = std::chrono::steady_clock::now();
+        int64_t phase1_us = std::chrono::duration_cast<std::chrono::microseconds>(t_phase1_end - t_phase1).count();
+
+        // === PHASE 2: Parallel DGW difficulty check ===
+        // All CBlockIndex entries now exist in the index.  GetNextWorkRequired
+        // only reads from the pprev chain (24 blocks for DGW), which is stable
+        // because we hold cs_main.  Each worker checks an independent slice.
+        int64_t dgw_us = 0;
+        size_t N = new_hdrs.size();
+        if (N > 0) {
+            // NOTE: must NOT use std::vector<bool> here — it is a bit-packed
+            // specialization where multiple entries share the same underlying
+            // word.  Concurrent writes from different threads to the same word
+            // are a data race (UB) that silently corrupts adjacent entries.
+            std::vector<uint8_t> dgw_ok(N, 0);
+            auto t_dgw = std::chrono::steady_clock::now();
+
+            unsigned int nThreads = std::max(1u, (unsigned int)std::thread::hardware_concurrency());
+            if (nThreads > N) nThreads = (unsigned int)N;
+
+            auto dgw_worker = [&](size_t start, size_t end) {
+                const Consensus::Params& cparams = chainparams.GetConsensus();
+                for (size_t j = start; j < end; j++) {
+                    const size_t hi = new_hdrs[j].idx;
+                    dgw_ok[j] = (headers[hi].nBits ==
+                                 GetNextWorkRequired(new_hdrs[j].pindexPrev, &headers[hi], cparams));
+                }
+            };
+
+            if (nThreads <= 1) {
+                dgw_worker(0, N);
+            } else {
+                std::vector<std::thread> threads;
+                threads.reserve(nThreads);
+                size_t chunk = (N + nThreads - 1) / nThreads;
+                for (unsigned int t = 0; t < nThreads; t++) {
+                    size_t s = t * chunk;
+                    size_t e = std::min(s + chunk, N);
+                    if (s < e) threads.emplace_back(dgw_worker, s, e);
+                }
+                for (auto& th : threads) th.join();
+            }
+
+            auto t_dgw_end = std::chrono::steady_clock::now();
+            dgw_us = std::chrono::duration_cast<std::chrono::microseconds>(t_dgw_end - t_dgw).count();
+
+            // Find first failure (preserves sequential-processing semantics)
+            for (size_t j = 0; j < N; j++) {
+                if (!dgw_ok[j]) {
+                    // Mark the failing header as invalid
+                    new_hdrs[j].pindex->nStatus |= BLOCK_FAILED_VALID;
+                    setDirtyBlockIndex.insert(new_hdrs[j].pindex);
+                    m_blockman.m_failed_blocks.insert(new_hdrs[j].pindex);
+                    // Mark all subsequent headers as failed children
+                    for (size_t k = j + 1; k < N; k++) {
+                        new_hdrs[k].pindex->nStatus |= BLOCK_FAILED_CHILD;
+                        setDirtyBlockIndex.insert(new_hdrs[k].pindex);
+                    }
+                    state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "incorrect proof of work");
+                    return error("%s: DGW check failed for block %s at batch position %zu",
+                                 __func__, hashes[new_hdrs[j].idx].ToString(), j);
+                }
+            }
+        }
+
+        ::ChainstateActive().CheckBlockIndex(chainparams.GetConsensus());
+
+        auto batch_end = std::chrono::steady_clock::now();
+        int64_t batch_us = std::chrono::duration_cast<std::chrono::microseconds>(batch_end - batch_start).count();
+        if (hdr_count > 0) {
+            LogPrintf("HEADERSYNC-PERF: batch=%d new=%d dup=%d total=%lldus "
+                      "phase1=%lldus(%.1f%%) dgw_parallel=%lldus(%.1f%%) "
+                      "per_hdr=%lldus\n",
+                      hdr_count, new_count, dup_count, batch_us,
+                      phase1_us, (batch_us > 0 ? 100.0 * phase1_us / batch_us : 0.0),
+                      dgw_us, (batch_us > 0 ? 100.0 * dgw_us / batch_us : 0.0),
+                      (hdr_count > 0 ? batch_us / (int64_t)hdr_count : 0));
         }
     }
     if (NotifyHeaderTip()) {

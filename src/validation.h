@@ -30,6 +30,7 @@
 #include <set>
 #include <stdint.h>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -37,6 +38,17 @@ class CChainState;
 class BlockValidationState;
 class CBlockIndex;
 class CBlockTreeDB;
+class CBlockHeader;
+
+/** Pre-compute GetHash() and GetPoWHash() for a batch of headers in parallel.
+ *  Uses std::thread pool (up to hardware_concurrency, max 16 threads).
+ *  Each thread processes a non-overlapping slice of the headers vector,
+ *  writing results to the corresponding indices of hashes/powHashes.
+ *  Safe because CBlockHeader::GetHash()/GetPoWHash() are const and use
+ *  only stack/heap-local state (no mutable fields, no global state). */
+void PrecomputeHeaderHashes(const std::vector<CBlockHeader>& headers,
+                           std::vector<uint256>& hashes,
+                           std::vector<uint256>& powHashes);
 class CBlockUndo;
 class CChainParams;
 class CInv;
@@ -440,6 +452,8 @@ public:
     void Unload() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     CBlockIndex* AddToBlockIndex(const CBlockHeader& block) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    /** Overload: use a pre-computed block hash to avoid redundant RinHash() calls. */
+    CBlockIndex* AddToBlockIndex(const CBlockHeader& block, const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     /** Create a new block index entry for a given block hash */
     CBlockIndex* InsertBlockIndex(const uint256& hash) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
@@ -455,6 +469,21 @@ public:
         BlockValidationState& state,
         const CChainParams& chainparams,
         CBlockIndex** ppindex) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+    /** Optimized overload — accepts pre-computed GetHash()/GetPoWHash() results
+     *  and collects per-phase timing when pointers are non-null. */
+    bool AcceptBlockHeader(
+        const CBlockHeader& block,
+        BlockValidationState& state,
+        const CChainParams& chainparams,
+        CBlockIndex** ppindex,
+        const uint256& cached_hash,
+        const uint256& cached_pow_hash,
+        int64_t* total_pow_check_us,
+        int64_t* total_ctx_us,
+        int64_t* total_add_us,
+        size_t* new_count,
+        size_t* dup_count) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     ~BlockManager() {
         Unload();
@@ -944,6 +973,10 @@ public:
      * @param[out] ppindex If set, the pointer will be set to point to the last new block index object for the given headers
      */
     bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& block, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex = nullptr) LOCKS_EXCLUDED(cs_main);
+
+    /** Overload accepting pre-computed hashes (avoids redundant RinHash calls). */
+    bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex,
+        const std::vector<uint256>& hashes, const std::vector<uint256>& powHashes) LOCKS_EXCLUDED(cs_main);
 
     //! Load the block tree and coins database from disk, initializing state if we're running with -reindex
     bool LoadBlockIndex(const CChainParams& chainparams) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
