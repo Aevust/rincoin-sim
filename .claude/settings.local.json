@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -i 's/litecoin:/rincoin:/g; s/test_litecoin-qt/test_rincoin-qt/g' src/qt/test/uritests.cpp src/qt/test/addressbooktests.cpp)",
+      "Bash(sed -i 's|// Litecoin:|// Rincoin:|g' src/pow.cpp src/txdb.cpp)",
+      "Bash(sed -i 's/# Litecoin: BTC applied these rules for all transactions once P2SH is enabled, on LTC we enforce/# Rincoin: BTC applied these rules for all transactions once P2SH is enabled, on RIN we enforce/' test/functional/p2p_segwit.py)",
+      "Bash(sed -i 's|litecoin-wallet|rincoin-wallet|g' test/functional/tool_wallet.py)",
+      "Bash(sed -i -e 's/starting litecoin with/starting rincoin with/g' -e 's/Start litecoin with/Start rincoin with/g' -e 's/Start litecoind with/Start rincoind with/g' test/functional/feature_help.py)",
+      "Bash(sed -i 's/communicating with a Litecoin node/communicating with a Rincoin node/g' test/functional/test_framework/p2p.py)",
+      "Bash(sed -i -e 's/Base class for a litecoin test script/Base class for a rincoin test script/g' -e 's/Individual litecoin test scripts/Individual rincoin test scripts/g' test/functional/test_framework/test_framework.py)",
+      "Bash(sed -i -e 's|/\\\\* Litecoin: Disable RBF|/* Rincoin: Disable RBF|g' -e 's|// Litecoin: Disable BumpFee tests|// Rincoin: Disable BumpFee tests|g' -e 's|litecoin:|rincoin:|g' src/qt/test/wallettests.cpp)",
+      "Bash(sed -i 's/during every Litecoin startup/during every Rincoin startup/' src/txdb.cpp)"
+    ]
+  }
+}
