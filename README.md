@@ -85,7 +85,7 @@ Generate blocks to verify the boundary values (e.g., reaching Phase 4):
 
 Join the official Rincoin community to stay updated, get support, and discuss development:
 
-[](https://discord.gg/H4Du5YuqFa)
+[![Discord Banner 2](https://discord.com/api/guilds/1354664874176680017/widget.png?style=banner2)](https://discord.gg/H4Du5YuqFa)
 
 ```
 ```

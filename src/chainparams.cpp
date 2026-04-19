@@ -93,7 +93,6 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
 class CMainParams : public CChainParams {
 public:
     CMainParams() {
-        throw std::runtime_error("CRITICAL: Mainnet is disabled in rincoin-sim. Use -regtest or -testnet only.");
         strNetworkID = CBaseChainParams::MAIN;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
@@ -582,6 +581,9 @@ std::unique_ptr<const CChainParams> CreateChainParams(const ArgsManager& args, c
 
 void SelectParams(const std::string& network)
 {
+    if (network == CBaseChainParams::MAIN) {
+        throw std::runtime_error("CRITICAL: Mainnet is disabled in rincoin-sim. Use -regtest or -testnet only.");
+    }
     SelectBaseParams(network);
     globalChainParams = CreateChainParams(gArgs, network);
 }
