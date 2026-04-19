@@ -64,22 +64,85 @@ While the emission schedule is accelerated for testing, the underlying architect
 Compile the daemon using standard Unix/Windows build procedures, then launch in `regtest` mode to allow CLI command access:
 
 ```bash
-./rincoind -regtest -daemon
-````
+./src/rincoind -regtest -daemon
+```
 
 Create a test wallet and generate a new address:
 
 ```bash
-./rincoin-cli -regtest createwallet "testwallet"
-./rincoin-cli -regtest getnewaddress
+./src/rincoin-cli -regtest createwallet "testwallet"
+./src/rincoin-cli -regtest getnewaddress
 ```
+*(Copy the generated address to use in the following commands)*
 
-Generate blocks to verify the boundary values (e.g., reaching Phase 4):
+### Step 1: Generate Blocks to Key Milestones
+Advance the blockchain to experience all phases of the Customized Halving (Scenario II).
 
 ```bash
-./rincoin-cli -regtest generatetoaddress 840 <your_address>
-./rincoin-cli -regtest getblockstats 840 | grep subsidy
+# Advance to Phase 4 (CH Activation at Block 840)
+./src/rincoin-cli -regtest generatetoaddress 840 <your_address>
+
+# Advance to Phase 5 (Block 2,100)
+./src/rincoin-cli -regtest generatetoaddress 1260 <your_address>
+
+# Advance to Phase 6 (Block 4,200)
+./src/rincoin-cli -regtest generatetoaddress 2100 <your_address>
+
+# Advance to Terminal Phase (Block 6,300)
+./src/rincoin-cli -regtest generatetoaddress 2100 <your_address>
 ```
+
+### Step 2: Validate the Boundary Values
+Clear your terminal and run the following command block to output the exact block subsidies at every phase transition. 
+
+```bash
+clear
+./src/rincoin-cli -regtest getblockstats 839 | grep subsidy
+./src/rincoin-cli -regtest getblockstats 840 | grep subsidy
+echo "-----------------------------------"
+./src/rincoin-cli -regtest getblockstats 2099 | grep subsidy
+./src/rincoin-cli -regtest getblockstats 2100 | grep subsidy
+echo "-----------------------------------"
+./src/rincoin-cli -regtest getblockstats 4199 | grep subsidy
+./src/rincoin-cli -regtest getblockstats 4200 | grep subsidy
+echo "-----------------------------------"
+./src/rincoin-cli -regtest getblockstats 6299 | grep subsidy
+./src/rincoin-cli -regtest getblockstats 6300 | grep subsidy
+```
+*(Note: The `subsidy` is displayed in satoshis. E.g., `400000000` = 4.0 RIN)*
+
+```
+
+```
+
+---
+
+## ✅ Validation Results
+
+Boundary Value Analysis (BVA) confirming Customized Halving 
+(Scenario II) executes correctly at 1/1000 scaled block heights.
+
+| Block (sim) | Block (mainnet) | Subsidy (satoshi) | RIN | Result |
+| :--- | :--- | :--- | :--- | :--- |
+| 839 | 839,000 | 625,000,000 | 6.25 | ✅ PASS |
+| **840** | **840,000** | **400,000,000** | **4.00** | ✅ **CH Activated** |
+| 2,099 | 2,099,000 | 400,000,000 | 4.00 | ✅ PASS |
+| **2,100** | **2,100,000** | **200,000,000** | **2.00** | ✅ **CH Halving 1** |
+| 4,199 | 4,199,000 | 200,000,000 | 2.00 | ✅ PASS |
+| **4,200** | **4,200,000** | **100,000,000** | **1.00** | ✅ **CH Halving 2** |
+| 6,299 | 6,299,000 | 100,000,000 | 1.00 | ✅ PASS |
+| **6,300** | **6,300,000** | **60,000,000** | **0.60** | ✅ **Terminal** |
+
+*Test Date: 2026-04-19*  
+*Environment: regtest (1/1000 scale)*  
+*Network: rincoin-sim (mainnet disabled)*
+
+---
+
+### 📸 Proof of Simulation (Screenshot)
+![Validation Results at Block 6300](assets/simulation-bva-results.png)
+
+---
 
 ## 💬 Community
 
