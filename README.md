@@ -109,11 +109,9 @@ echo "-----------------------------------"
 ./src/rincoin-cli -regtest getblockstats 6299 | grep subsidy
 ./src/rincoin-cli -regtest getblockstats 6300 | grep subsidy
 ```
+
 *(Note: The `subsidy` is displayed in satoshis. E.g., `400000000` = 4.0 RIN)*
 
-```
-
-```
 
 ---
 
