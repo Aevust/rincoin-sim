@@ -138,7 +138,7 @@ Boundary Value Analysis (BVA) confirming Customized Halving
 ---
 
 ### 📸 Proof of Simulation (Screenshot)
-![Validation Results at Block 6300](assets/simulation-bva-results.png)
+![Validation Results at Block 6300](doc/assets/simulation-bva-results.png)
 
 ---
 
