@@ -15,6 +15,7 @@
 #include <versionbitsinfo.h>
 
 #include <assert.h>
+#include <stdexcept>
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
@@ -92,6 +93,7 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
 class CMainParams : public CChainParams {
 public:
     CMainParams() {
+        throw std::runtime_error("CRITICAL: Mainnet is disabled in rincoin-sim. Use -regtest or -testnet only.");
         strNetworkID = CBaseChainParams::MAIN;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();

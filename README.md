@@ -1,83 +1,91 @@
-# Rincoin Core
+# Rincoin-Sim: Customized Halving Simulation Environment
 
-![Version](https://img.shields.io/badge/version-1.0.6-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.6--sim-red.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Status](https://img.shields.io/badge/status-SIMULATION_ONLY-critical.svg)
 
-Rincoin is a decentralized digital currency, based on Bitcoin Core, that introduces a new Proof-of-Work hashing algorithm called **RinHash**. RinHash is a hybrid PoW algorithm designed for both security and ASIC-resistance, combining BLAKE3, Argon2d, and SHA3-256. This README provides an overview of Rincoin’s specifications, the RinHash algorithm, and network parameters.
+> ⚠️ **CRITICAL WARNING: DO NOT MERGE TO MAINNET** ⚠️
+> 
+> This repository (`rincoin-sim`) is a dedicated simulation environment strictly designed to test the Customized Halving (Scenario II) mechanism on the `regtest` network at a highly accelerated pace.
+> 
+> The hardcoded block height thresholds in `src/validation.cpp` and `src/chainparams.cpp` have been intentionally scaled down by **1/1000**. 
+> **Using this codebase to run a Mainnet or public Testnet node will result in immediate network consensus failure, severe chain forks, and catastrophic disruption of the Rincoin economy.**
 
-## 🛡️ Core Architecture & Network Sovereignty
+---
 
-Rincoin Core has been meticulously engineered and audited to ensure complete mathematical and network independence from its legacy upstream codebases. Recent major milestones include:
+## 🔬 Purpose of this Repository
 
-- **P2P Network Sovereignty:** All legacy cryptographic salts and network identifiers have been fully purged. Internal P2P routing mechanisms and dummy IPv6 prefixes are strictly derived from Rincoin-native entropy (e.g., `sha256("rincoin")`), ensuring absolute P2P isolation and preventing cross-network contamination.
-- **Customized Consensus & Emission (Scenario II):** Rincoin implements a sophisticated, multi-phase emission schedule. It begins with 210,000-block intervals (~145 days) but strategically dilates to multi-million block epochs after height 840,000 to prevent entropic yield collapse. It ultimately culminates in a perpetual terminal reward (0.6 RIN), securing the network's long-term thermodynamic future. All consensus rules, including custom base58 address prefixes (prefix `60`), have been strictly validated.
-- **Production-Ready CI/CD (100% Test Green):** The core validation and utility test suites have achieved a 100% "PASS" state. Legacy benchmarks reliant on obsolete upstream block data have been strategically decoupled, ensuring a pristine, crash-free Continuous Integration pipeline for future development.
+Rincoin implements a sophisticated, multi-phase emission schedule (Scenario II) designed to prevent entropic yield collapse and secure the network's long-term thermodynamic future. To strictly validate this long-term economic model without waiting years for block generation, this repository accelerates the timeline.
 
-## 📊 Key Specifications
+In this environment, the `regtest` network is configured to scale down block heights by **1/1000**:
+- The standard `nSubsidyHalvingInterval` is set to `210` blocks (simulating 210,000 blocks).
+- The Customized Halving trigger (Phase 4) activates at block `840` instead of 840,000.
 
-| Feature | Specification |
-| :--- | :--- |
-| **Coin Name / Ticker** | Rincoin (**RIN**) |
-| **Consensus Mechanism**| Proof-of-Work (PoW) – **RinHash** algorithm |
-| **Block Target Time** | 1 minute (60 seconds per block) |
-| **Initial Block Reward**| 50 RIN |
-| **Emission Schedule** | Custom multi-phase (Initial: 210k blocks, Dilated: up to 2.1M blocks, Terminal: 0.6 RIN) |
-| **Difficulty Retarget**| Every 2016 blocks (~33.6 hours) |
-| **Proof-of-Work Hash** | 256-bit output |
-| **Address Format** | Base58 addresses start with **R** |
-| **Network Ports** | P2P: `9555`, RPC: `9556` |
-| **Network Magic** | `0x52` `0x49` `0x4E` `0x43` ("RINC") |
+---
 
-### 📉 Emission Schedule (Customized Halving: Scenario II)
+## 📊 Scaled Emission Schedule (Simulation: 1/1000)
 
-Rincoin implements a unique piecewise emission schedule to ensure long-term network sustainability and prevent entropic yield collapse. 
+The following table outlines the accelerated timeline for Boundary Value Analysis (BVA) validation via `regtest` RPC commands:
 
-| Phase | Block Height | Reward (RIN) | Duration (Blocks) |
-| :--- | :--- | :--- | :--- |
-| **Phase 0** | 0 - 209,999 | 50 | 210,000 |
-| **Phase 1** | 210,000 - 419,999 | 25 | 210,000 |
-| **Phase 2** | 420,000 - 629,999 | 12.5 | 210,000 |
-| **Phase 3** | 630,000 - 839,999 | 6.25 | 210,000 |
-| **Phase 4** | 840,000 - 2,099,999 | 4 | 1,260,000 |
-| **Phase 5** | 2,100,000 - 4,199,999 | 2 | 2,100,000 |
-| **Phase 6** | 4,200,000 - 6,299,999 | 1 | 2,100,000 |
-| **Terminal**| 6,300,000+ | 0.6 | Perpetual |
+| Phase | Sim Block Height | Original Mainnet Height | Reward (RIN) | Sim Duration (Blocks) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Phase 0** | 0 - 209 | 0 - 209,999 | 50 | 210 |
+| **Phase 1** | 210 - 419 | 210,000 - 419,999 | 25 | 210 |
+| **Phase 2** | 420 - 629 | 420,000 - 629,999 | 12.5 | 210 |
+| **Phase 3** | 630 - 839 | 630,000 - 839,999 | 6.25 | 210 |
+| **Phase 4** | 840 - 2,099 | 840,000 - 2,099,999 | 4 | 1,260 |
+| **Phase 5** | 2,100 - 4,199 | 2,100,000 - 4,199,999 | 2 | 2,100 |
+| **Phase 6** | 4,200 - 6,299 | 4,200,000 - 6,299,999 | 1 | 2,100 |
+| **Terminal**| 6,300+ | 6,300,000+ | 0.6 | Perpetual |
 
-## ⚙️ Proof-of-Work Algorithm: RinHash
+### 🧪 Simulation Scale (rincoin-sim)
 
-RinHash is a custom proof-of-work algorithm using:
+| Milestone | Mainnet | This Repo (1/1000) |
+| :--- | :--- | :--- |
+| CH Activation | 840,000 | 840 |
+| Phase 5 Start | 2,100,000 | 2,100 |
+| Phase 6 Start | 4,200,000 | 4,200 |
+| Terminal Start | 6,300,000 | 6,300 |
+| Network | mainnet | regtest only |
 
-1. **BLAKE3**: Fast initial hashing  
-2. **Argon2d**: Memory-hard step to resist ASICs  
-3. **SHA3-256**: Final standard cryptographic hash
+---
 
-A valid block satisfies:  
-`SHA3-256( Argon2d( BLAKE3(block_header) )) < Target`
+## ⚙️ Core Architecture (Inherited)
 
-This design provides fast verification, memory-hardness to deter ASICs, and seamless compatibility with existing 256-bit PoW frameworks.
+While the emission schedule is accelerated for testing, the underlying architecture remains identical to Rincoin Core:
+- **Proof-of-Work (PoW):** RinHash algorithm (BLAKE3 -> Argon2d -> SHA3-256).
+- **P2P Sovereignty:** All legacy cryptographic salts and network identifiers have been fully purged.
+- **Network Magic Bytes:** `0x52` `0x49` `0x4E` `0x43` ("RINC").
 
-## 🌐 Network and Usage
+---
 
-- **Magic bytes:** `0x52 0x49 0x4E 0x43`  
-- **Ports:** `9555` (P2P), `9556` (RPC)  
-- **Mining:** CPU/GPU mining supported  
-- **Wallet:** Full-node wallet with RIN units
+## 🔭 How to run the Simulation
 
-## 🛠️ Building Rincoin
+Compile the daemon using standard Unix/Windows build procedures, then launch in `regtest` mode to allow CLI command access:
 
-For detailed instructions on building release binaries for Linux and Windows, see [doc/build-release.md](doc/build-release.md).
+```bash
+./rincoind -regtest -daemon
+````
 
-**Quick start for building from source:**
-- [Linux/Unix Build Notes](doc/build-unix.md)
-- [Windows Build Notes](doc/build-windows.md)
+Create a test wallet and generate a new address:
 
-## 💻 Developer Notes
+```bash
+./rincoin-cli -regtest createwallet "testwallet"
+./rincoin-cli -regtest getnewaddress
+```
 
-- See `src/chainparams.cpp` for network configuration.  
-- See `src/primitives/block.cpp` (or relevant files) for `GetPoWHash()` RinHash implementation.  
+Generate blocks to verify the boundary values (e.g., reaching Phase 4):
+
+```bash
+./rincoin-cli -regtest generatetoaddress 840 <your_address>
+./rincoin-cli -regtest getblockstats 840 | grep subsidy
+```
 
 ## 💬 Community
 
 Join the official Rincoin community to stay updated, get support, and discuss development:
 
-[![Discord Banner 2](https://discord.com/api/guilds/1354664874176680017/widget.png?style=banner2)](https://discord.gg/H4Du5YuqFa)
+[](https://discord.gg/H4Du5YuqFa)
+
+```
+```
