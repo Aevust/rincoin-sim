@@ -1272,14 +1272,14 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
     // Customized Halving Schedule (Scenario II)
     // Phase 4+: explicit piecewise schedule by block height
-    if (nHeight >= 6300000)
-        return CAmount(60000000);   // Terminal: 0.6 RIN (6,300,000~)
-    else if (nHeight >= 4200000)
-        return 1 * COIN;            // Phase 6: 1 RIN (4,200,000 ~ 6,299,999)
-    else if (nHeight >= 2100000)
-        return 2 * COIN;            // Phase 5: 2 RIN (2,100,000 ~ 4,199,999)
-    else if (nHeight >= 840000)
-        return 4 * COIN;            // Phase 4: 4 RIN (840,000 ~ 2,099,999)
+    if (nHeight >= 6300)
+        return CAmount(60000000);   // Terminal: 0.6 RIN (6,300~)
+    else if (nHeight >= 4200)
+        return 1 * COIN;            // Phase 6: 1 RIN (4,200 ~ 6,299)
+    else if (nHeight >= 2100)
+        return 2 * COIN;            // Phase 5: 2 RIN (2,100 ~ 4,199)
+    else if (nHeight >= 840)
+        return 4 * COIN;            // Phase 4: 4 RIN (840 ~ 2,099)
 
     // Phase 0-3: standard halving via bit shift every nSubsidyHalvingInterval blocks
     // Phase 0 (0~209,999): 50 RIN, Phase 1 (210,000~419,999): 25 RIN,
