@@ -11,7 +11,11 @@ bool CheckTransaction(const CTransaction& tx, TxValidationState& state)
 {
     // Basic checks that don't depend on any context
     if (!tx.IsMWEBOnly()) {
-        if (tx.vin.empty())
+        // HogEx transactions may have an empty vin on the very first MWEB block
+        // (when no previous HogEx output exists to spend and no peg-ins are present).
+        // Their inputs are validated contextually in MWEB::Node::ContextualCheckBlock
+        // and MWEB::Node::ConnectBlock, so we exempt them from this context-free check.
+        if (tx.vin.empty() && !tx.IsHogEx())
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-vin-empty");
         if (tx.vout.empty())
             return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-vout-empty");
