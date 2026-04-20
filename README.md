@@ -1,25 +1,42 @@
-# Rincoin-Sim: Customized Halving Simulation Environment
+# Rincoin-Sim: Customized Halving & MWEB Simulation Environment
 
 ![Version](https://img.shields.io/badge/version-1.0.6--sim-red.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Status](https://img.shields.io/badge/status-SIMULATION_ONLY-critical.svg)
+![Status](https://img.shields.io/badge/status-REGTEST_ONLY-critical.svg)
 
-> ⚠️ **CRITICAL WARNING: DO NOT MERGE TO MAINNET** ⚠️
+> ⚠️ **CRITICAL WARNING: REGTEST ONLY / DO NOT MERGE TO MAINNET** ⚠️
 > 
-> This repository (`rincoin-sim`) is a dedicated simulation environment strictly designed to test the Customized Halving (Scenario II) mechanism on the `regtest` network at a highly accelerated pace.
+> This repository (`rincoin-sim`) is a dedicated simulation environment strictly designed for local `regtest` execution. It tests the **Customized Halving (Scenario II)** mechanism at a highly accelerated pace and validates the **MWEB initial activation**.
 > 
-> The hardcoded block height thresholds in `src/validation.cpp` and `src/chainparams.cpp` have been intentionally scaled down by **1/1000**. 
-> **Using this codebase to run a Mainnet or public Testnet node will result in immediate network consensus failure, severe chain forks, and catastrophic disruption of the Rincoin economy.**
+> **Built-in Killswitches:** Hardcoded exceptions in `src/chainparams.cpp` intentionally prevent both Mainnet and Testnet daemons from initializing. 
+> **This is a critical safety measure to prevent accidental misuse. Since this repository uses 1/1000 scaled parameters, any attempt to connect to public networks would result in immediate consensus rejection by standard nodes.**
+
+### 🌐 Network Availability in Simulation
+
+| Network | Status | Command |
+| :--- | :--- | :--- |
+| **regtest** | ✅ **Allowed** | `./src/rincoind -regtest` |
+| **testnet** | ❌ Disabled | Error & exit |
+| **mainnet** | ❌ Disabled | Error & exit |
+
+*Reason: `rincoin-sim` uses 1/1000 scaled block parameters strictly incompatible with public Testnet/Mainnet consensus rules. Both are physically disabled at the code level.*
 
 ---
 
 ## 🔬 Purpose of this Repository
 
+This repository serves a dual purpose for validating Rincoin's core upgrades prior to mainnet deployment:
+
+### 1. Economic Validation (Customized Halving)
 Rincoin implements a sophisticated, multi-phase emission schedule (Scenario II) designed to prevent entropic yield collapse and secure the network's long-term thermodynamic future. To strictly validate this long-term economic model without waiting years for block generation, this repository accelerates the timeline.
 
 In this environment, the `regtest` network is configured to scale down block heights by **1/1000**:
 - The standard `nSubsidyHalvingInterval` is set to `210` blocks (simulating 210,000 blocks).
 - The Customized Halving trigger (Phase 4) activates at block `840` instead of 840,000.
+
+### 2. Privacy Validation (MWEB Activation)
+This environment serves as the ultimate proving ground for the MimbleWimble Extension Block (MWEB) integration. It includes critical consensus fixes for the initial HogEx (Hogwarts Express) transaction, ensuring that MWEB can activate safely without triggering `bad-txns-vin-empty` consensus failures. 
+It allows developers to thoroughly validate MWEB Peg-in operations and automated change address obfuscation under accelerated regtest conditions.
 
 ---
 
@@ -117,8 +134,7 @@ echo "-----------------------------------"
 
 ## ✅ Validation Results
 
-Boundary Value Analysis (BVA) confirming Customized Halving 
-(Scenario II) executes correctly at 1/1000 scaled block heights.
+Boundary Value Analysis (BVA) confirms that the Customized Halving (Scenario II) executes correctly at 1/1000 scaled block heights.
 
 | Block (sim) | Block (mainnet) | Subsidy (satoshi) | RIN | Result |
 | :--- | :--- | :--- | :--- | :--- |
@@ -133,12 +149,104 @@ Boundary Value Analysis (BVA) confirming Customized Halving
 
 *Test Date: 2026-04-19*  
 *Environment: regtest (1/1000 scale)*  
-*Network: rincoin-sim (mainnet disabled)*
+*Network: rincoin-sim (mainnet & testnet disabled)*
+
+---
+
+## 🛡️ MWEB (MimbleWimble Extension Block) Simulation
+
+This repository includes a critical consensus fix for the initial 
+HogEx transaction, enabling MWEB to activate safely on Rincoin.
+
+### Reproducible MWEB Test Script
+
+Stop the daemon and reset the regtest environment:
+```bash
+./src/rincoin-cli -regtest stop
+rm -rf ~/.rincoin/regtest
+./src/rincoind -regtest -daemon
+sleep 3
+```
+
+Copy and paste the entire block below:
+
+```bash
+# 1. Create test wallet
+./src/rincoin-cli -regtest createwallet "mweb_test"
+
+# 2. Generate addresses
+# Note: Mining rewards must go to transparent address (rrin1...)
+# MWEB address (rrmweb1...) is for receiving via sendtoaddress only
+MINER_ADDR=$(./src/rincoin-cli -regtest getnewaddress "miner")
+MWEB_ADDR=$(./src/rincoin-cli -regtest getnewaddress "mweb_receiver" "mweb")
+echo "Miner (Transparent): $MINER_ADDR"
+echo "Receiver (MWEB)    : $MWEB_ADDR"
+
+# 3. Mine 450 blocks to transparent address
+# (MWEB activates at ~block 432 in regtest)
+./src/rincoin-cli -regtest generatetoaddress 450 $MINER_ADDR
+
+# 4. Peg-in: Send 10 RIN from transparent chain to MWEB
+./src/rincoin-cli -regtest sendtoaddress $MWEB_ADDR 10
+
+# 5. Mine 1 block to confirm
+./src/rincoin-cli -regtest generatetoaddress 1 $MINER_ADDR
+
+# 6. Verify MWEB balance
+./src/rincoin-cli -regtest listaddressgroupings
+```
+
+---
+
+## ✅ Expected Result
+
+```json
+[
+  [
+    [
+      "rrin1q8twvefee3rpvk2yj...",
+      13975.00000000,
+      "miner"
+    ]
+  ],
+  [
+    [
+      "rrmweb1qq0mdeg9msd2hqm...",
+      14.99963500
+    ]
+  ],
+  [
+    [
+      "rrmweb1qqfd6u6nk4pvyu9...",
+      10.00000000,
+      "mweb_receiver"
+    ]
+  ]
+]
+```
+
+*Test Date: 2026-04-20*  
+*Environment: regtest (1/1000 scale)*  
+*Network: rincoin-sim (mainnet & testnet disabled)*
+
+**Understanding the Output:**
+The presence of two MWEB addresses is the intended behavior and cryptographically proves that the privacy features are fully functional:
+* `mweb_receiver`: Holds the exact `10.00000000 RIN` explicitly sent via the Peg-in transaction.
+* **Unlabeled MWEB Address (`14.999... RIN`)**: This is an automatically generated **Change Address**. Following the standard UTXO model, the remaining balance from the Peg-in transaction (minus network fees) is routed to this newly generated, hidden MWEB address to maximize transaction privacy.
+* `miner`: The remaining transparent balance from the initial block generation.
+
+**Conclusion:** The MWEB integration, including Peg-in transactions and automated change obfuscation, is operating flawlessly.
+
+> ⚠️ Note: `generatetoaddress` only accepts transparent addresses (`rrin1...`).  
+> MWEB addresses (`rrmweb1...`) receive funds via `sendtoaddress` only.  
+> This is expected behavior, identical to Litecoin MWEB specification.
 
 ---
 
 ### 📸 Proof of Simulation (Screenshot)
 ![Validation Results at Block 6300](doc/assets/simulation-bva-results.png)
+
+![MWEB Validation Results](doc/assets/simulation-mimble-wimble-results.png)
 
 ---
 
@@ -148,5 +256,4 @@ Join the official Rincoin community to stay updated, get support, and discuss de
 
 [![Discord Banner 2](https://discord.com/api/guilds/1354664874176680017/widget.png?style=banner2)](https://discord.gg/H4Du5YuqFa)
 
-```
-```
+

@@ -582,7 +582,17 @@ std::unique_ptr<const CChainParams> CreateChainParams(const ArgsManager& args, c
 void SelectParams(const std::string& network)
 {
     if (network == CBaseChainParams::MAIN) {
-        throw std::runtime_error("CRITICAL: Mainnet is disabled in rincoin-sim. Use -regtest or -testnet only.");
+        throw std::runtime_error(
+            "CRITICAL: Mainnet is disabled in rincoin-sim. "
+            "Use -regtest only."
+        );
+    }
+    if (network == CBaseChainParams::TESTNET) {
+        throw std::runtime_error(
+            "CRITICAL: Testnet is disabled in rincoin-sim. "
+            "This repo uses 1/1000 scaled params incompatible "
+            "with public Testnet consensus. Use -regtest only."
+        );
     }
     SelectBaseParams(network);
     globalChainParams = CreateChainParams(gArgs, network);
