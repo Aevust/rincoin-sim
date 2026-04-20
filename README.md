@@ -15,7 +15,7 @@
 
 | Network | Status | Command |
 | :--- | :--- | :--- |
-| **regtest** | ✅ **Allowed** | `./src/rincoind -regtest` |
+| **regtest** | ✅ **Allowed** | `./rincoind -regtest -daemon` |
 | **testnet** | ❌ Disabled | Error & exit |
 | **mainnet** | ❌ Disabled | Error & exit |
 
@@ -78,115 +78,120 @@ While the emission schedule is accelerated for testing, the underlying architect
 
 ## 🔭 How to run the Simulation
 
-Compile the daemon using standard Unix/Windows build procedures, then launch in `regtest` mode to allow CLI command access:
+Download the latest release tarball and extract it to your preferred
+directory. The binaries are self-contained and require no external
+dependencies.
 
 ```bash
-./src/rincoind -regtest -daemon
+# 1. Extract the release tarball
+tar -xzf rincoin-sim-v1.0.6-linux-x86_64.tar.gz
+
+# 2. Navigate to the binary directory
+cd rincoin-sim-v1.0.6-linux-x86_64/bin
+
+# 3. Launch the simulator daemon in regtest mode
+./rincoind -regtest -daemon
 ```
+
+> 💡 All commands below assume you are inside the
+> `rincoin-sim-v1.0.6-linux-x86_64/bin/` directory.
 
 Create a test wallet and generate a new address:
 
 ```bash
-./src/rincoin-cli -regtest createwallet "testwallet"
-./src/rincoin-cli -regtest getnewaddress
+./rincoin-cli -regtest createwallet "testwallet"
+./rincoin-cli -regtest getnewaddress
 ```
 *(Copy the generated address to use in the following commands)*
 
 ### Step 1: Generate Blocks to Key Milestones
-Advance the blockchain to experience all phases of the Customized Halving (Scenario II).
 
 ```bash
 # Advance to Phase 4 (CH Activation at Block 840)
-./src/rincoin-cli -regtest generatetoaddress 840 <your_address>
+./rincoin-cli -regtest generatetoaddress 840 <your_address> > /dev/null
 
 # Advance to Phase 5 (Block 2,100)
-./src/rincoin-cli -regtest generatetoaddress 1260 <your_address>
+./rincoin-cli -regtest generatetoaddress 1260 <your_address> > /dev/null
 
 # Advance to Phase 6 (Block 4,200)
-./src/rincoin-cli -regtest generatetoaddress 2100 <your_address>
+./rincoin-cli -regtest generatetoaddress 2100 <your_address> > /dev/null
 
 # Advance to Terminal Phase (Block 6,300)
-./src/rincoin-cli -regtest generatetoaddress 2100 <your_address>
+./rincoin-cli -regtest generatetoaddress 2100 <your_address> > /dev/null
 ```
 
 ### Step 2: Validate the Boundary Values
-Clear your terminal and run the following command block to output the exact block subsidies at every phase transition. 
 
 ```bash
 clear
-./src/rincoin-cli -regtest getblockstats 839 | grep subsidy
-./src/rincoin-cli -regtest getblockstats 840 | grep subsidy
+./rincoin-cli -regtest getblockstats 839 | grep subsidy
+./rincoin-cli -regtest getblockstats 840 | grep subsidy
 echo "-----------------------------------"
-./src/rincoin-cli -regtest getblockstats 2099 | grep subsidy
-./src/rincoin-cli -regtest getblockstats 2100 | grep subsidy
+./rincoin-cli -regtest getblockstats 2099 | grep subsidy
+./rincoin-cli -regtest getblockstats 2100 | grep subsidy
 echo "-----------------------------------"
-./src/rincoin-cli -regtest getblockstats 4199 | grep subsidy
-./src/rincoin-cli -regtest getblockstats 4200 | grep subsidy
+./rincoin-cli -regtest getblockstats 4199 | grep subsidy
+./rincoin-cli -regtest getblockstats 4200 | grep subsidy
 echo "-----------------------------------"
-./src/rincoin-cli -regtest getblockstats 6299 | grep subsidy
-./src/rincoin-cli -regtest getblockstats 6300 | grep subsidy
+./rincoin-cli -regtest getblockstats 6299 | grep subsidy
+./rincoin-cli -regtest getblockstats 6300 | grep subsidy
 ```
 
-*(Note: The `subsidy` is displayed in satoshis. E.g., `400000000` = 4.0 RIN)*
-
-
 ### ⚡ Quick Validation (One-Shot Script)
-For rapid end-to-end verification, paste the entire block below into your terminal. This fully automated script will reset the environment, generate all necessary blocks, and output the cleanly formatted Boundary Value Analysis.
 
 ```bash
 # ===== Customized Halving Full Simulation (One-shot) =====
 
 # 0. Setup: stop daemon, reset, restart
-./src/rincoin-cli -regtest stop
+./rincoin-cli -regtest stop 2>/dev/null
 rm -rf ~/.rincoin/regtest
-./src/rincoind -regtest -daemon
+./rincoind -regtest -daemon
 sleep 3
 
 # 1. Create wallet and address
-./src/rincoin-cli -regtest createwallet "ch_test"
-ADDR=$(./src/rincoin-cli -regtest getnewaddress "sim")
+./rincoin-cli -regtest createwallet "ch_test"
+ADDR=$(./rincoin-cli -regtest getnewaddress "sim")
 echo "Simulation Address: $ADDR"
 
 # 2. Generate blocks through all phases
 echo "[1/4] Advancing to Phase 4 (CH Activation: Block 840)..."
-./src/rincoin-cli -regtest generatetoaddress 840 $ADDR > /dev/null
+./rincoin-cli -regtest generatetoaddress 840 $ADDR > /dev/null
 
 echo "[2/4] Advancing to Phase 5 (Block 2,100)..."
-./src/rincoin-cli -regtest generatetoaddress 1260 $ADDR > /dev/null
+./rincoin-cli -regtest generatetoaddress 1260 $ADDR > /dev/null
 
 echo "[3/4] Advancing to Phase 6 (Block 4,200)..."
-./src/rincoin-cli -regtest generatetoaddress 2100 $ADDR > /dev/null
+./rincoin-cli -regtest generatetoaddress 2100 $ADDR > /dev/null
 
 echo "[4/4] Advancing to Terminal Phase (Block 6,300)..."
-./src/rincoin-cli -regtest generatetoaddress 2100 $ADDR > /dev/null
+./rincoin-cli -regtest generatetoaddress 2100 $ADDR > /dev/null
 
 echo ""
 echo "===== Boundary Value Analysis Results ====="
 
-# 3. BVA validation
 echo "[Phase 3 → 4: CH Activation]"
 echo -n "Block 839  (expect 6.25 RIN): "
-./src/rincoin-cli -regtest getblockstats 839 | grep subsidy
+./rincoin-cli -regtest getblockstats 839 | grep subsidy
 echo -n "Block 840  (expect 4.00 RIN): "
-./src/rincoin-cli -regtest getblockstats 840 | grep subsidy
+./rincoin-cli -regtest getblockstats 840 | grep subsidy
 
 echo "[Phase 4 → 5: CH Halving 1]"
 echo -n "Block 2099 (expect 4.00 RIN): "
-./src/rincoin-cli -regtest getblockstats 2099 | grep subsidy
+./rincoin-cli -regtest getblockstats 2099 | grep subsidy
 echo -n "Block 2100 (expect 2.00 RIN): "
-./src/rincoin-cli -regtest getblockstats 2100 | grep subsidy
+./rincoin-cli -regtest getblockstats 2100 | grep subsidy
 
 echo "[Phase 5 → 6: CH Halving 2]"
 echo -n "Block 4199 (expect 2.00 RIN): "
-./src/rincoin-cli -regtest getblockstats 4199 | grep subsidy
+./rincoin-cli -regtest getblockstats 4199 | grep subsidy
 echo -n "Block 4200 (expect 1.00 RIN): "
-./src/rincoin-cli -regtest getblockstats 4200 | grep subsidy
+./rincoin-cli -regtest getblockstats 4200 | grep subsidy
 
 echo "[Phase 6 → Terminal]"
 echo -n "Block 6299 (expect 1.00 RIN): "
-./src/rincoin-cli -regtest getblockstats 6299 | grep subsidy
+./rincoin-cli -regtest getblockstats 6299 | grep subsidy
 echo -n "Block 6300 (expect 0.60 RIN): "
-./src/rincoin-cli -regtest getblockstats 6300 | grep subsidy
+./rincoin-cli -regtest getblockstats 6300 | grep subsidy
 
 echo ""
 echo "===== Simulation Complete ====="
@@ -224,9 +229,9 @@ HogEx transaction, enabling MWEB to activate safely on Rincoin.
 
 Stop the daemon and reset the regtest environment:
 ```bash
-./src/rincoin-cli -regtest stop
+./rincoin-cli -regtest stop
 rm -rf ~/.rincoin/regtest
-./src/rincoind -regtest -daemon
+./rincoind -regtest -daemon
 sleep 3
 ```
 
@@ -234,28 +239,28 @@ Copy and paste the entire block below:
 
 ```bash
 # 1. Create test wallet
-./src/rincoin-cli -regtest createwallet "mweb_test"
+./rincoin-cli -regtest createwallet "mweb_test"
 
 # 2. Generate addresses
 # Note: Mining rewards must go to transparent address (rrin1...)
 # MWEB address (rrmweb1...) is for receiving via sendtoaddress only
-MINER_ADDR=$(./src/rincoin-cli -regtest getnewaddress "miner")
-MWEB_ADDR=$(./src/rincoin-cli -regtest getnewaddress "mweb_receiver" "mweb")
+MINER_ADDR=$(./rincoin-cli -regtest getnewaddress "miner")
+MWEB_ADDR=$(./rincoin-cli -regtest getnewaddress "mweb_receiver" "mweb")
 echo "Miner (Transparent): $MINER_ADDR"
 echo "Receiver (MWEB)    : $MWEB_ADDR"
 
 # 3. Mine 450 blocks to transparent address
 # (MWEB activates at ~block 432 in regtest)
-./src/rincoin-cli -regtest generatetoaddress 450 $MINER_ADDR
+./rincoin-cli -regtest generatetoaddress 450 $MINER_ADDR > /dev/null
 
 # 4. Peg-in: Send 10 RIN from transparent chain to MWEB
-./src/rincoin-cli -regtest sendtoaddress $MWEB_ADDR 10
+./rincoin-cli -regtest sendtoaddress $MWEB_ADDR 10 > /dev/null
 
 # 5. Mine 1 block to confirm
-./src/rincoin-cli -regtest generatetoaddress 1 $MINER_ADDR
+./rincoin-cli -regtest generatetoaddress 1 $MINER_ADDR > /dev/null
 
 # 6. Verify MWEB balance
-./src/rincoin-cli -regtest listaddressgroupings
+./rincoin-cli -regtest listaddressgroupings
 ```
 
 ---
@@ -267,35 +272,35 @@ For rapid end-to-end verification, paste the entire block below into your termin
 # ===== MWEB Full Simulation (One-shot) =====
 
 # 0. Reset environment
-./src/rincoin-cli -regtest stop 2>/dev/null
+./rincoin-cli -regtest stop 2>/dev/null
 sleep 1
 rm -rf ~/.rincoin/regtest
-./src/rincoind -regtest -daemon
+./rincoind -regtest -daemon
 sleep 3
 
 # 1. Create wallet and addresses
-./src/rincoin-cli -regtest createwallet "mweb_test" > /dev/null
-MINER_ADDR=$(./src/rincoin-cli -regtest getnewaddress "miner")
-MWEB_ADDR=$(./src/rincoin-cli -regtest getnewaddress "mweb_receiver" "mweb")
+./rincoin-cli -regtest createwallet "mweb_test" > /dev/null
+MINER_ADDR=$(./rincoin-cli -regtest getnewaddress "miner")
+MWEB_ADDR=$(./rincoin-cli -regtest getnewaddress "mweb_receiver" "mweb")
 echo "Miner (Transparent): $MINER_ADDR"
 echo "MWEB  (Private)    : $MWEB_ADDR"
 echo ""
 
 # 2. Mine blocks
 echo "[1/3] Mining 450 blocks (MWEB activates at ~block 432)..."
-./src/rincoin-cli -regtest generatetoaddress 450 $MINER_ADDR > /dev/null
+./rincoin-cli -regtest generatetoaddress 450 $MINER_ADDR > /dev/null
 
 # 3. Peg-in
 echo "[2/3] Peg-in: Sending 10 RIN to MWEB address..."
-./src/rincoin-cli -regtest sendtoaddress $MWEB_ADDR 10 > /dev/null
+./rincoin-cli -regtest sendtoaddress $MWEB_ADDR 10 > /dev/null
 
 # 4. Confirm
 echo "[3/3] Mining 1 block to confirm Peg-in..."
-./src/rincoin-cli -regtest generatetoaddress 1 $MINER_ADDR > /dev/null
+./rincoin-cli -regtest generatetoaddress 1 $MINER_ADDR > /dev/null
 
 echo ""
 echo "===== MWEB Validation Results ====="
-./src/rincoin-cli -regtest listaddressgroupings
+./rincoin-cli -regtest listaddressgroupings
 echo ""
 echo "===== Simulation Complete ====="
 echo "Expected: rrmweb1... address holding 10.00000000 RIN"
