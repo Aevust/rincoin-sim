@@ -209,9 +209,9 @@ Boundary Value Analysis (BVA) confirms that the Customized Halving (Scenario II)
 | 6,299 | 6,299,000 | 100,000,000 | 1.00 | ✅ PASS |
 | **6,300** | **6,300,000** | **60,000,000** | **0.60** | ✅ **Terminal** |
 
-*Test Date: 2026-04-20*  
-*Environment: regtest (1/1000 scale)*  
-*Network: rincoin-sim (mainnet & testnet disabled)*
+> *Test Date: 2026-04-20*  
+> *Environment: regtest (1/1000 scale)*  
+> *Network: rincoin-sim (mainnet & testnet disabled)*
 
 ---
 
@@ -305,7 +305,7 @@ echo "Expected: rrmweb1... address holding 10.00000000 RIN"
 
 ## ✅ Expected Result
 
-```json
+```bash
 ===== MWEB Validation Results =====
 [
   [
@@ -334,11 +334,13 @@ echo "Expected: rrmweb1... address holding 10.00000000 RIN"
 Expected: rrmweb1... address holding 10.00000000 RIN
 ```
 
-*Test Date: 2026-04-20*  
-*Environment: regtest (1/1000 scale)*  
-*Network: rincoin-sim (mainnet & testnet disabled)*
+> *Test Date: 2026-04-20*  
+> *Environment: regtest (1/1000 scale)*  
+> *Network: rincoin-sim (mainnet & testnet disabled)*
 
-**Understanding the Output:**
+---
+
+### Understanding the Output
 The presence of two MWEB addresses is the intended behavior and cryptographically proves that the privacy features are fully functional:
 * `mweb_receiver`: Holds the exact `10.00000000 RIN` explicitly sent via the Peg-in transaction.
 * **Unlabeled MWEB Address (`14.999... RIN`)**: This is an automatically generated **Change Address**. Following the standard UTXO model, the remaining balance from the Peg-in transaction (minus network fees) is routed to this newly generated, hidden MWEB address to maximize transaction privacy.
