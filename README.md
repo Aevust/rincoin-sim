@@ -137,6 +137,8 @@ echo "-----------------------------------"
 ./rincoin-cli -regtest getblockstats 6300 | grep subsidy
 ```
 
+---
+
 ### ⚡ Quick Validation (One-Shot Script)
 
 ```bash

@@ -2,14 +2,15 @@
 
 ## Reporting a Vulnerability
 
-To report security issues send an email to contact@litecoin.org (not for support).
+To report security issues send an email to info@rincoin.org (not for support).
 
 The following keys may be used to communicate sensitive information to developers:
 
 | Name | Fingerprint |
 |------|-------------|
-| Charlie Lee | 1A2511E978239E491A096D0A828AC1F94EF26053 |
-| Xinxi Wang | EEF1C9FE09262D71DDE83C223EF697503BF73187 |
-| Adrian Gallagher | 59CAF0E96F23F53747945FD4FE3348877809386C |
+| Aevust | ED20 B635 4EE4 526D 01F8 3B53 8B6E 3BF4 5C71 4ECA |
 
-You can import a key by running the following command with that individual’s fingerprint: `gpg --recv-keys "<fingerprint>"` Ensure that you put quotes around fingerprints containing spaces.
+### How to obtain our public key
+
+You can import our public key directly from this repository:
+`gpg --import security/Aevust_0x8B6E3BF45C714ECA_public.asc`
