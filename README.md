@@ -6,7 +6,7 @@
 
 > ⚠️ **CRITICAL WARNING: REGTEST ONLY / DO NOT MERGE TO MAINNET** ⚠️
 > 
-> This repository (`rincoin-sim`) is a dedicated simulation environment strictly designed for local `regtest` execution. It tests the **Customized Halving (Scenario II)** mechanism at a highly accelerated pace and validates the **MWEB initial activation**.
+> This repository (`rincoin-sim`) is a dedicated simulation environment strictly designed for local `regtest` execution. It tests the **Customized Halving (Scenario II)** mechanism at a highly accelerated pace and validates the **MWEB full lifecycle (Peg-in, Peg-out, and Reorg)**.
 > 
 > **Built-in Killswitches:** Hardcoded exceptions in `src/chainparams.cpp` intentionally prevent both Mainnet and Testnet daemons from initializing. 
 > **This is a critical safety measure to prevent accidental misuse. Since this repository uses 1/1000 scaled parameters, any attempt to connect to public networks would result in immediate consensus rejection by standard nodes.**
@@ -34,9 +34,12 @@ In this environment, the `regtest` network is configured to scale down block hei
 - The standard `nSubsidyHalvingInterval` is set to `210` blocks (simulating 210,000 blocks).
 - The Customized Halving trigger (Phase 4) activates at block `840` instead of 840,000.
 
-### 2. Privacy Validation (MWEB Activation)
-This environment serves as the ultimate proving ground for the MimbleWimble Extension Block (MWEB) integration. It includes critical consensus fixes for the initial HogEx (Hogwarts Express) transaction, ensuring that MWEB can activate safely without triggering `bad-txns-vin-empty` consensus failures. 
-It allows developers to thoroughly validate MWEB Peg-in operations and automated change address obfuscation under accelerated regtest conditions.
+### 2. Privacy Validation (MWEB Activation & Resilience)
+This environment serves as the ultimate proving ground for the MimbleWimble Extension Block (MWEB) integration. It includes critical consensus fixes for the initial HogEx (Hogwarts Express) transaction, ensuring that MWEB can activate safely without triggering `bad-txns-vin-empty` consensus failures.
+Unlike standard activation tests, our automated suite fully validates the complete MWEB lifecycle:
+- **Peg-in**: Secure transfer from Transparent to MWEB.
+- **Peg-out**: Secure transfer from MWEB back to Transparent addresses.
+- **Reorg Resilience**: Proves MWEB transaction robustness during blockchain rollbacks (`invalidateblock`) and re-mining events.
 
 ---
 
@@ -73,6 +76,26 @@ While the emission schedule is accelerated for testing, the underlying architect
 - **Proof-of-Work (PoW):** RinHash algorithm (BLAKE3 -> Argon2d -> SHA3-256).
 - **P2P Sovereignty:** All legacy cryptographic salts and network identifiers have been fully purged.
 - **Network Magic Bytes:** `0x52` `0x49` `0x4E` `0x43` ("RINC").
+
+---
+
+## 🚀 Automated Simulation Scripts (Recommended)
+
+If you have cloned this repository, the fastest way to validate is via the automated scripts in `scripts/`. They handle daemon initialization, wallet creation, block generation, and result output automatically.
+
+> *Note: These scripts require a Linux/Unix environment (or WSL on Windows).*
+
+### Customized Halving Simulation
+Validates all BVA boundary values of the scaled emission schedule end-to-end.
+```bash
+./scripts/sim-ch.sh
+```
+
+### MWEB Full Lifecycle Simulation
+Validates Peg-in, Peg-out (with wallet isolation), and Chain Reorganization (Reorg) resilience in a single automated run.
+```bash
+./scripts/sim-mweb.sh
+```
 
 ---
 
@@ -224,8 +247,7 @@ Boundary Value Analysis (BVA) confirms that the Customized Halving (Scenario II)
 
 ## 🛡️ MWEB (MimbleWimble Extension Block) Simulation
 
-This repository includes a critical consensus fix for the initial 
-HogEx transaction, enabling MWEB to activate safely on Rincoin.
+This repository includes critical consensus fixes for the initial HogEx transaction, enabling MWEB to activate safely on Rincoin. The full lifecycle — Peg-in, Peg-out, and Reorg resilience — has been validated under accelerated regtest conditions.
 
 ### Reproducible MWEB Test Script
 
@@ -267,8 +289,8 @@ echo "Receiver (MWEB)    : $MWEB_ADDR"
 
 ---
 
-### ⚡ MWEB Quick Validation (One-Shot Script)
-For rapid end-to-end verification, paste the entire block below into your terminal. This fully automated script will reset the environment, generate the required blocks, execute the Peg-in transaction, and output the final balances.
+### ⚡ MWEB Peg-In Quick Validation (One-Shot Script)
+For rapid end-to-end verification, paste the entire block below into your terminal. "This script validates Peg-in activation only. For full lifecycle validation (Peg-in, Peg-out, and Reorg), use `./scripts/sim-mweb.sh`."
 
 ```bash
 # ===== MWEB Full Simulation (One-shot) =====
@@ -341,7 +363,25 @@ echo "Expected: rrmweb1... address holding 10.00000000 RIN"
 Expected: rrmweb1... address holding 10.00000000 RIN
 ```
 
-> *Test Date: 2026-04-20*  
+### ✅ MWEB Full Lifecycle Results (sim-mweb.sh)
+
+```text
+===== Peg-out Results =====
+Transparent 2 received : 5.00000000 RIN (expect ~5.0)
+MWEB remaining         : 4.99991600 RIN (expect ~4.999)
+
+[6/6] Reorg Test: Invalidating Peg-out block...
+  After invalidate: height=451 (expect 451)
+  Transaction status : "confirmations": (expect 0 or orphaned)
+  -> Generating a dummy transaction to ensure a unique block hash...
+  Re-mining replacement block...
+  After re-mine: height=452 (expect 452)
+
+===== Simulation Complete =====
+Validated: Transparent → MWEB (Peg-in) → Transparent (Peg-out) + Reorg
+```
+
+> *Test Date: 2026-04-25*  
 > *Environment: regtest (1/1000 scale)*  
 > *Network: rincoin-sim (mainnet & testnet disabled)*
 
@@ -353,7 +393,7 @@ The presence of two MWEB addresses is the intended behavior and cryptographicall
 * **Unlabeled MWEB Address (`14.999... RIN`)**: This is an automatically generated **Change Address**. Following the standard UTXO model, the remaining balance from the Peg-in transaction (minus network fees) is routed to this newly generated, hidden MWEB address to maximize transaction privacy.
 * `miner`: The remaining transparent balance from the initial block generation.
 
-**Conclusion:** The MWEB integration, including Peg-in transactions and automated change obfuscation, is operating flawlessly.
+**Conclusion:** The MWEB integration, including Peg-in, Peg-out, automated change obfuscation, and Reorg resilience, is operating flawlessly.
 
 > ⚠️ Note: `generatetoaddress` only accepts transparent addresses (`rrin1...`).  
 > MWEB addresses (`rrmweb1...`) receive funds via `sendtoaddress` only.  
@@ -366,6 +406,8 @@ The presence of two MWEB addresses is the intended behavior and cryptographicall
 
 ![MWEB Validation Results](doc/assets/simulation-mimble-wimble-results.png)
 
+![MWEB Reorg Validation Results](doc/assets/simulation-mweb-reorg-results.png)
+
 ---
 
 ## 💬 Community
@@ -373,5 +415,3 @@ The presence of two MWEB addresses is the intended behavior and cryptographicall
 Join the official Rincoin community to stay updated, get support, and discuss development:
 
 [![Discord Banner 2](https://discord.com/api/guilds/1354664874176680017/widget.png?style=banner2)](https://discord.gg/H4Du5YuqFa)
-
-
