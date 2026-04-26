@@ -174,13 +174,12 @@ void Miner::AddHogExTransaction(const CBlockIndex* pIndexPrev, CBlock* pblock, C
     //
     // Update block & template
     //
-    // Defensive guard: never add a transaction with both empty vin and vout to vtx.
-    // A valid HogEx must have at least one vout (the hogAddr output).
-    // An empty vin is permissible only for the very first HogEx block.
-    if (hogExTransaction.vin.empty() && hogExTransaction.vout.empty()) {
-        LogPrintf("%s: WARNING - skipping HogEx transaction with empty vin and vout\n", __func__);
-        return;
-    }
+    // The HogAddr output is added unconditionally above, so vout must be
+    // non-empty here. Empty vin is legitimate (e.g. the very first MWEB block
+    // with no peg-ins), but an empty vout would mean the HogAddr step was
+    // skipped and the block would fail consensus once committed. Fail loudly
+    // rather than silently emitting an invalid block.
+    assert(!hogExTransaction.vout.empty());
     pblock->vtx.emplace_back(MakeTransactionRef(std::move(hogExTransaction)));
     pblock->mweb_block = MWEB::Block(mweb_block);
 
