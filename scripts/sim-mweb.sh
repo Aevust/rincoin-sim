@@ -14,7 +14,7 @@ elif [ -f "./src/rincoind" ]; then
     RINCOINCLI="./src/rincoin-cli"
 else
     echo "Error: rincoind not found."
-    echo "Run from rincoin-sim-v1.0.6-linux-x86_64/bin/ or source dir."
+    echo "Run from rincoin-sim-v1.0.6.1-linux-x86_64/ or source dir."
     exit 1
 fi
 

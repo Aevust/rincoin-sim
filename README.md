@@ -1,6 +1,6 @@
 # Rincoin-Sim: Customized Halving & MWEB Simulation Environment
 
-![Version](https://img.shields.io/badge/version-1.0.6--sim-red.svg)
+![Version](https://img.shields.io/badge/version-1.0.6.1--sim-red.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-REGTEST_ONLY-critical.svg)
 
@@ -15,7 +15,7 @@
 
 | Network | Status | Command |
 | :--- | :--- | :--- |
-| **regtest** | ✅ **Allowed** | `./rincoind -regtest -daemon` |
+| **regtest** | ✅ **Allowed** | `./bin/rincoind -regtest -daemon` |
 | **testnet** | ❌ Disabled | Error & exit |
 | **mainnet** | ❌ Disabled | Error & exit |
 
@@ -107,17 +107,28 @@ dependencies.
 
 ```bash
 # 1. Extract the release tarball
-tar -xzf rincoin-sim-v1.0.6-linux-x86_64.tar.gz
+tar -xzf rincoin-sim-v1.0.6.1-linux-x86_64.tar.gz
 
-# 2. Navigate to the binary directory
-cd rincoin-sim-v1.0.6-linux-x86_64/bin
-
-# 3. Launch the simulator daemon in regtest mode
-./rincoind -regtest -daemon
+# 2. Navigate to the project root directory
+cd rincoin-sim-v1.0.6.1-linux-x86_64/
 ```
 
-> 💡 All commands below assume you are inside the
-> `rincoin-sim-v1.0.6-linux-x86_64/bin/` directory.
+> 💡 **Automated scripts** (`./scripts/sim-ch.sh`, `./scripts/sim-mweb.sh`) must be
+> run from this root directory. **Manual commands** below require navigating into `bin/`:
+
+```bash
+# For manual verification only
+cd bin/
+```
+
+> 💡 All manual commands below assume you are inside the
+> `rincoin-sim-v1.0.6.1-linux-x86_64/bin/` directory.
+
+Launch the simulator daemon in regtest mode:
+
+```bash
+./rincoind -regtest -daemon
+```
 
 Create a test wallet and generate a new address:
 
