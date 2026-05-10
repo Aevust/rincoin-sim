@@ -159,3 +159,13 @@ dist/
 #Claude
 .claude
 settings.json
+
+# Bench and Test executables
+src/bench/bench_rincoin
+src/bench/bench_litecoin
+src/test/test_rincoin
+src/test/test_litecoin
+
+# Release outputs
+SHA256SUMS.txt
+rincoin-sim-*/
