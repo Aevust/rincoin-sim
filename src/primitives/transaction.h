@@ -384,6 +384,12 @@ public:
     // MAX_STANDARD_VERSION will be equal.
     static const int32_t MAX_STANDARD_VERSION=2;
 
+    // Rincoin replay protection: ASCII "RIN3" encoded as big-endian int32.
+    // Value: 0x52494e33 = 1,380,535,859 (decimal)
+    // Enforced on all standard transactions from nRinHashForkHeight onwards.
+    // Exemptions: coinbase, HogEx, and MWEBOnly transactions.
+    static const int32_t RIN_FORK_TX_VERSION = 0x52494e33;
+
     // The local variables are made const to prevent unintended modification
     // without updating the cached hash value. However, CTransaction is not
     // actually immutable; deserialization and assignment are implemented,

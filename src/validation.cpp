@@ -3820,9 +3820,26 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     if (!MWEB::Node::ContextualCheckBlock(block, consensusParams, pindexPrev, state)) {
         return false;
     }
+    
+    // Rincoin RIN3 fork: enforce RIN_FORK_TX_VERSION on user transactions.
+    // Exemptions: coinbase (miner reward), HogEx (MWEB integration tx),
+    // and MWEBOnly (MWEB-to-MWEB tx) — all are system-generated, not
+    // replay-attack targets.
+    if (nHeight >= consensusParams.nRinHashForkHeight) {
+        for (const auto& tx : block.vtx) {
+            if (tx->IsCoinBase()) continue;
+            if (tx->IsHogEx()) continue;
+            if (tx->IsMWEBOnly()) continue;
+            if (tx->nVersion != CTransaction::RIN_FORK_TX_VERSION) {
+                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
+                                     "bad-tx-rinhash-version",
+                                     "tx nVersion does not match required RinHash fork version");
+            }
+        }
+    }
 
     return true;
-}
+}    
 
 // Original signature — non-optimized path computes both hashes and forwards
 bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
