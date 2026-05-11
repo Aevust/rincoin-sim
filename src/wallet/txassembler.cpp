@@ -1,5 +1,6 @@
 #include <wallet/txassembler.h>
 
+#include <chainparams.h>
 #include <consensus/tx_check.h>
 #include <consensus/validation.h>
 #include <policy/policy.h>
@@ -113,7 +114,7 @@ void TxAssembler::CreateTransaction_Locked(
     // to avoid acquiring cs_main while cs_wallet is held (lock-order reversal).
     const int last_height = m_wallet.GetLastBlockHeight();
     if (last_height >= Params().GetConsensus().nRinHashForkHeight - 1) {
-      new_tx.tx.nVersion = CTransaction::RIN_FORK_TX_VERSION;    
+        new_tx.tx.nVersion = CTransaction::RIN_FORK_TX_VERSION;
     }
 
     m_wallet.AvailableCoins(new_tx.available_coins, true, &new_tx.coin_control, 1, MAX_MONEY, MAX_MONEY, 0);
