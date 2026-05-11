@@ -588,19 +588,9 @@ std::unique_ptr<const CChainParams> CreateChainParams(const ArgsManager& args, c
 
 void SelectParams(const std::string& network)
 {
-    if (network == CBaseChainParams::MAIN) {
-        throw std::runtime_error(
-            "CRITICAL: Mainnet is disabled in rincoin-sim. "
-            "Use -regtest only."
-        );
-    }
-    if (network == CBaseChainParams::TESTNET) {
-        throw std::runtime_error(
-            "CRITICAL: Testnet is disabled in rincoin-sim. "
-            "This repo uses 1/1000 scaled params incompatible "
-            "with public Testnet consensus. Use -regtest only."
-        );
-    }
+    // Note: rincoin-sim's Mainnet/Testnet protection is implemented in
+    // bitcoind.cpp's AppInit() rather than here, so unit tests can still
+    // instantiate MainParams for chain-parameter-independent test cases.
     SelectBaseParams(network);
     globalChainParams = CreateChainParams(gArgs, network);
 }

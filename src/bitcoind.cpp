@@ -77,6 +77,23 @@ static bool AppInit(int argc, char* argv[])
         if (!args.ReadConfigFiles(error, true)) {
             return InitError(Untranslated(strprintf("Error reading configuration file: %s\n", error)));
         }
+
+        // rincoin-sim: Mainnet and Testnet are disabled at the daemon level.
+        // This build is configured for regtest simulation only.
+        // (bitcoin-cli/bitcoin-tx/bitcoin-wallet can still load MainParams
+        //  in offline read-only contexts; only the node daemon is restricted.)
+        const std::string& chain_name = args.GetChainName();
+        if (chain_name == CBaseChainParams::MAIN) {
+            return InitError(Untranslated(
+                "Mainnet is disabled in rincoin-sim. Use -regtest only.\n"));
+        }
+        if (chain_name == CBaseChainParams::TESTNET) {
+            return InitError(Untranslated(
+                "Testnet is disabled in rincoin-sim. This repo uses 1/1000 "
+                "scaled params incompatible with public Testnet consensus. "
+                "Use -regtest only.\n"));
+        }
+
         // Check for chain settings (Params() calls are only valid after this clause)
         try {
             SelectParams(args.GetChainName());
