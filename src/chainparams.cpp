@@ -336,14 +336,14 @@ public:
         consensus.BIP66Height = 76; // 8075c771ed8b495ffd943980a95f702ab34fce3c8c54e379548bda33cc8c0573
         consensus.CSVHeight = 6; // 00000000025e930139bac5c6c31a403776da130831ab85be56578f3fa75369bb
         consensus.SegwitHeight = 6; // 00000000002b980fcd729daaa248fd9316a5200e9b367f4ff2c42453e84201ca
-        consensus.MinBIP9WarningHeight = 206; // segwit activation height + miner confirmation window
+        consensus.MinBIP9WarningHeight = 216; // segwit activation height + miner confirmation window
         consensus.powLimit = uint256S("0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 33 * 60 * 60; // 33hour
         consensus.nPowTargetSpacing = 60;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = false;
-        consensus.nRuleChangeActivationThreshold = 1512; // 75% for testchains
-        consensus.nMinerConfirmationWindow = 200; // nPowTargetTimespan / nPowTargetSpacing
+        consensus.nRuleChangeActivationThreshold = 158; // 75% for testchains
+        consensus.nMinerConfirmationWindow = 210; // nPowTargetTimespan / nPowTargetSpacing
         consensus.DGWHeight = 0; // Dark Gravity Wave (DGW) difficulty adjustment algorithm
         consensus.nRinHashForkHeight = 840; // RIN3 testnet activation height
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
