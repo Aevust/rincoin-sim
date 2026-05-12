@@ -1270,21 +1270,30 @@ bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const CBlockIndex* pindex
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
-    // Customized Halving Schedule (Scenario II)
-    // Phase 4+: explicit piecewise schedule by block height
-    if (nHeight >= 6300)
-        return CAmount(60000000);   // Terminal: 0.6 RIN (6,300~)
-    else if (nHeight >= 4200)
-        return 1 * COIN;            // Phase 6: 1 RIN (4,200 ~ 6,299)
-    else if (nHeight >= 2100)
-        return 2 * COIN;            // Phase 5: 2 RIN (2,100 ~ 4,199)
-    else if (nHeight >= 840)
-        return 4 * COIN;            // Phase 4: 4 RIN (840 ~ 2,099)
+    // Rincoin Customized Halving Schedule (Scenario II)
+    // Phase boundaries are expressed as multiples of nSubsidyHalvingInterval.
+    // This dynamic scaling allows Mainnet (interval=210,000) and Regtest
+    // (interval=210) to share the same consensus rule with proportional timing.
+    //
+    // Mainnet schedule (interval = 210,000):
+    //   Phase 0 (0 ~ 209,999):              50    RIN  [interval×0 .. ×1)
+    //   Phase 1 (210,000 ~ 419,999):        25    RIN  [interval×1 .. ×2)
+    //   Phase 2 (420,000 ~ 629,999):        12.5  RIN  [interval×2 .. ×3)
+    //   Phase 3 (630,000 ~ 839,999):         6.25 RIN  [interval×3 .. ×4)
+    //   Phase 4 (840,000 ~ 2,099,999):       4    RIN  [interval×4 .. ×10) ← CH activated
+    //   Phase 5 (2,100,000 ~ 4,199,999):     2    RIN  [interval×10 .. ×20)
+    //   Phase 6 (4,200,000 ~ 6,299,999):     1    RIN  [interval×20 .. ×30)
+    //   Terminal (6,300,000 ~ perpetual):    0.6  RIN  [interval×30 .. ∞)
+    const int interval = consensusParams.nSubsidyHalvingInterval;
 
-    // Phase 0-3: standard halving via bit shift every nSubsidyHalvingInterval blocks
-    // Phase 0 (0~209,999): 50 RIN, Phase 1 (210,000~419,999): 25 RIN,
-    // Phase 2 (420,000~629,999): 12.5 RIN, Phase 3 (630,000~839,999): 6.25 RIN
-    int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
+    // Phase 4+: explicit piecewise schedule (Customized Halving)
+    if (nHeight >= 30 * interval) return CAmount(60000000);  // Terminal: 0.6 RIN
+    if (nHeight >= 20 * interval) return 1 * COIN;           // Phase 6
+    if (nHeight >= 10 * interval) return 2 * COIN;           // Phase 5
+    if (nHeight >=  4 * interval) return 4 * COIN;           // Phase 4 [CH]
+
+    // Phase 0-3: standard halving via bit shift
+    int halvings = nHeight / interval;
     CAmount nSubsidy = 50 * COIN;
     nSubsidy >>= halvings;
     return nSubsidy;
