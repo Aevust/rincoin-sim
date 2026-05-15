@@ -604,6 +604,19 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     if (fRequireStandard && !IsStandardTx(tx, reason))
         return state.Invalid(TxValidationResult::TX_NOT_STANDARD, reason);
 
+    // Rincoin RIN3: mempool-level enforcement (prevents Mempool Zombie DoS).
+    // Coinbase (L595) and HogEx (L599) are already rejected above; only
+    // user txs and MWEBOnly reach here. MWEBOnly is exempt (same as
+    // ContextualCheckBlock). At next-block height >= nRinHashForkHeight,
+    // legacy-nVersion txs can never be mined — block them at entry.
+    if (!tx.IsMWEBOnly()) {
+        const int next_height = ::ChainActive().Tip()->nHeight + 1;
+        if (next_height >= args.m_chainparams.GetConsensus().nRinHashForkHeight
+            && tx.nVersion != CTransaction::RIN_FORK_TX_VERSION) {
+            return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                                  "bad-tx-rinhash-version");
+        }
+    }
     // Do not work on transactions that are too small.
     // A transaction with 1 segwit input and 1 P2WPHK output has non-witness size of 82 bytes.
     // Transactions smaller than this are not relayed to mitigate CVE-2017-12842 by not relaying
