@@ -18,6 +18,34 @@ else
     exit 1
 fi
 
+# ---------- Cleanup trap ----------
+# Runs on EXIT (normal finish, error, or Ctrl-C).
+#
+# Manual inspection mode:
+#   KEEP_ALIVE=1 ./scripts/sim-mweb.sh
+#   After the script ends, rincoind stays running so you can inspect:
+#     ./bin/rincoin-cli -regtest gettransaction <txid>
+#     ./bin/rincoin-cli -regtest getblockcount
+#   When done: ./bin/rincoin-cli -regtest stop
+cleanup() {
+    if [ "${KEEP_ALIVE:-0}" = "1" ]; then
+        echo ""
+        echo "=== KEEP_ALIVE=1: rincoind is still running for manual inspection ==="
+        echo "  Commands available:"
+        echo "    $RINCOINCLI -regtest getblockcount"
+        echo "    $RINCOINCLI -regtest -rpcwallet=mweb_wallet getbalance"
+        echo "    $RINCOINCLI -regtest -rpcwallet=miner_wallet getreceivedbyaddress <addr>"
+        echo "  When done: $RINCOINCLI -regtest stop"
+        return
+    fi
+    echo ""
+    echo "=== Cleanup (trap EXIT) ==="
+    $RINCOINCLI -regtest stop 2>/dev/null || true
+    sleep 1
+    pkill -f "rincoind.*regtest" 2>/dev/null || true
+}
+trap cleanup EXIT
+
 # 0. Reset environment
 echo "Stopping rincoind..."
 $RINCOINCLI -regtest stop 2>/dev/null || true

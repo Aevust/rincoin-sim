@@ -18,6 +18,18 @@ else
     exit 1
 fi
 
+# ---------- Cleanup trap ----------
+# Runs on EXIT (normal finish, error, or Ctrl-C) so rincoind is never
+# left running as a zombie after the script ends.
+cleanup() {
+    echo ""
+    echo "=== Cleanup (trap EXIT) ==="
+    $RINCOINCLI -regtest stop 2>/dev/null || true
+    sleep 1
+    pkill -f "rincoind.*regtest" 2>/dev/null || true
+}
+trap cleanup EXIT
+
 # 0. Setup: stop daemon, reset, restart
 echo "Stopping rincoind..."
 $RINCOINCLI -regtest stop 2>/dev/null || true
