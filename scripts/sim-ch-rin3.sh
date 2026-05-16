@@ -1,12 +1,16 @@
 #!/bin/bash
-# Rincoin-Sim: Customized Halving × RIN3 Reorg Simulation (v3)
+# Rincoin-Sim: Customized Halving x RIN3 Simulation (v4)
 # Usage: ./scripts/sim-ch-rin3.sh
 #
-# Tests:
-#   [CH]    100-block reorg across all 4 subsidy boundaries → BVA after reorg
-#   [RIN3]  User tx confirmed above fork height → nVersion proven = RIN_FORK_TX_VERSION
-#   [RIN3]  Reorg to tip=839 → wallet still RIN3 (border edge)
-#   [RIN3]  Reorg to tip=838 → wallet reverts to legacy nVersion
+# Structure:
+#   Section 1: Phase Advance (blocks 1 -> 6400)
+#   Section 2: BVA  -- Boundary Value Analysis (8 blocks, no reorgs)
+#   Section 3: RIN3 -- Wallet Version Tests (positive + boundary edge)
+#   Section 4: Attack Simulation
+#     [A] Minimal Attack      840  ->  839 ->  840  (  1-block cross-boundary)
+#     [B] Super Attack       2100  ->  839 -> 2100  (1261-block, Phase 4 full erasure)
+#     [C] Cross-Phase Attack 4200  -> 2099 -> 4200  (2101-block, Phase 5 full erasure)
+#     [D] Terminal Attack    6300  -> 4199 -> 6300  (2101-block, Phase 6 + Terminal erasure)
 #
 # Companion: test/functional/feature_rin3_enforcement.py
 #   covers consensus-level rejection of legacy-nVersion blocks at height >= fork.
@@ -18,6 +22,19 @@ FAIL=0
 
 ok()   { echo "  [PASS] $1"; PASS=$((PASS + 1)); }
 fail() { echo "  [FAIL] $1"; FAIL=$((FAIL + 1)); }
+
+# ---------- Cleanup trap ----------
+# Runs on EXIT (normal, error, or Ctrl-C) so rincoind is never
+# left as a zombie. pgrep loop at startup handles the previous run;
+# this trap covers unexpected mid-test crashes.
+cleanup() {
+    echo ""
+    echo "=== Cleanup (trap EXIT) ==="
+    $RINCOINCLI -regtest stop 2>/dev/null || true
+    sleep 1
+    pkill -f "rincoind.*regtest" 2>/dev/null || true
+}
+trap cleanup EXIT
 
 # ---------- Binary detection ----------
 if [ -f "./bin/rincoind" ]; then
@@ -32,19 +49,6 @@ else
     exit 1
 fi
 
-# ---------- Cleanup trap ----------
-# Runs on EXIT (normal, error, or signal) to ensure rincoind is never
-# left as a zombie. The startup pgrep loop handles the previous run;
-# this trap handles unexpected mid-test crashes. (Gemini 2)
-cleanup() {
-    echo ""
-    echo "=== Cleanup (trap EXIT) ==="
-    $RINCOINCLI -regtest stop 2>/dev/null || true
-    sleep 1
-    pkill -f "rincoind.*regtest" 2>/dev/null || true
-}
-trap cleanup EXIT
-
 # ---------- Helpers ----------
 height()    { $RINCOINCLI -regtest getblockcount; }
 blockhash() { $RINCOINCLI -regtest getblockhash "$1"; }
@@ -52,21 +56,17 @@ json_val()  { python3 -c "import sys,json; print(json.load(sys.stdin)$1)"; }
 
 RIN_FORK_TX_VERSION_DEC=1380535859   # 0x52494e33 ("RIN3")
 
-# check_subsidy HEIGHT EXPECTED_SATOSHIS LABEL
+# check_subsidy HEIGHT EXPECTED_SAT LABEL
 #   Shows raw getblockstats line (sim-ch.sh style) then PASS/FAIL judgment.
 check_subsidy() {
     local h=$1 expected=$2 label=$3
     local raw actual rin exp_rin
-
     raw=$($RINCOINCLI -regtest getblockstats "$h")
     actual=$(echo "$raw" | json_val "['subsidy']")
-    rin=$(python3 -c "print(f'{$actual/1e8:.2f}')")
+    rin=$(python3    -c "print(f'{$actual/1e8:.2f}')")
     exp_rin=$(python3 -c "print(f'{$expected/1e8:.2f}')")
-
-    # Raw output — same style as sim-ch.sh "grep subsidy"
     printf "    Block %-5s | subsidy = %-12s sat  (%s RIN)  expect %s RIN\n" \
         "$h" "$actual" "$rin" "$exp_rin"
-
     if [ "$actual" = "$expected" ]; then
         ok "Block $h: $rin RIN [$label]"
     else
@@ -85,10 +85,12 @@ check_height() {
 }
 
 # check_tx_nversion TXID EXPECTED_DEC LABEL
+#   Uses gettransaction (wallet RPC) so confirmed txs are accessible
+#   without -txindex. v4 fix for getrawtransaction error code -5.
 check_tx_nversion() {
     local txid=$1 expected=$2 label=$3
     local hex nver
-    hex=$($RINCOINCLI -regtest getrawtransaction "$txid")
+    hex=$($RINCOINCLI -regtest gettransaction "$txid" | json_val "['hex']")
     nver=$($RINCOINCLI -regtest decoderawtransaction "$hex" | json_val "['version']")
     printf "    Tx nVersion = %-12s (expect %s)\n" "$nver" "$expected"
     if [ "$nver" = "$expected" ]; then
@@ -98,63 +100,88 @@ check_tx_nversion() {
     fi
 }
 
-# reorg_bva BOUNDARY PRE_SATS POST_SATS LABEL
-reorg_bva() {
-    local boundary=$1 pre_sats=$2 post_sats=$3 label=$4
-    local cur target n hash pre_rin post_rin
+# advance_to TARGET [LABEL]
+#   Mine blocks to TARGET height with progress every 500 blocks.
+advance_to() {
+    local target=$1
+    local label=${2:-"Mining"}
+    local cur; cur=$(height)
+    [ "$cur" -ge "$target" ] && return
+    local n=$((target - cur))
+    local remaining=$n
+    echo "  [$label] $n blocks -> h=$target..."
+    while [ "$remaining" -gt 0 ]; do
+        local batch=$(( remaining > 500 ? 500 : remaining ))
+        $RINCOINCLI -regtest generatetoaddress "$batch" "$ADDR" > /dev/null
+        remaining=$((remaining - batch))
+        [ "$remaining" -gt 0 ] && echo "    -> h=$(height)  ($remaining remaining)"
+    done
+    echo "    -> h=$(height)"
+}
 
-    pre_rin=$(python3 -c "print(f'{$pre_sats/1e8:.2f}')")
+# dummy_tx
+#   Inject a low-value tx so the re-mined block has a unique merkle root,
+#   avoiding hash collision with the just-invalidated block when mempool is
+#   empty and difficulty/timestamp are identical. (Pattern from sim-mweb.sh)
+dummy_tx() {
+    if ! $RINCOINCLI -regtest sendtoaddress "$ADDR" 0.001 > /dev/null 2>&1; then
+        echo "  [warn] dummy tx failed (low balance?) -- unique-hash guarantee weaker"
+    fi
+}
+
+# attack_scenario LABEL ADVANCE_TO REORG_AT PRE_SATS TARGET POST_SATS
+#
+#   Flow:
+#     1. advance_to ADVANCE_TO   (chain must reach this height before the attack)
+#     2. invalidate REORG_AT     (chain falls to REORG_AT-1)
+#     3. check_subsidy at REORG_AT-1   (verify rolled-back phase)
+#     4. dummy_tx + advance_to TARGET  (remine)
+#     5. check_subsidy at TARGET       (verify restored phase)
+#
+#   Chain height after call = TARGET (ready for next scenario).
+attack_scenario() {
+    local label=$1
+    local advance=$2
+    local reorg_at=$3
+    local pre_sats=$4
+    local target=$5
+    local post_sats=$6
+
+    local pre_h=$((reorg_at - 1))
+    local pre_rin post_rin depth hash
+
+    pre_rin=$(python3  -c "print(f'{$pre_sats/1e8:.2f}')")
     post_rin=$(python3 -c "print(f'{$post_sats/1e8:.2f}')")
 
     echo ""
-    echo "====== Reorg BVA: $label ======"
-    echo "  Boundary: Block $boundary  |  $pre_rin RIN → $post_rin RIN"
+    echo "====== Attack Scenario: $label ======"
 
-    cur=$(height)
-    target=$((boundary + 100))
+    advance_to "$advance"
 
-    if [ "$cur" -lt "$target" ]; then
-        n=$((target - cur))
-        echo ""
-        echo "  [Advancing] Mining $n blocks → height $target..."
-        $RINCOINCLI -regtest generatetoaddress "$n" "$ADDR" > /dev/null
-        echo "              Height: $(height)"
-    fi
-
+    depth=$(( $(height) - pre_h ))
+    echo "  From h=$(height): invalidating block $reorg_at -> falls to h=$pre_h"
+    echo "  Reorg depth   : $depth blocks"
+    echo "  Rolled-back   : $pre_rin RIN @ h=$pre_h"
+    echo "  Restored      : $post_rin RIN @ h=$target"
     echo ""
-    echo "  [Reorg] Invalidating block $boundary → chain rolls back..."
-    hash=$(blockhash "$boundary")
+
+    hash=$(blockhash "$reorg_at")
     $RINCOINCLI -regtest invalidateblock "$hash"
-    check_height $((boundary - 1)) "after reorg"
+    check_height "$pre_h" "after reorg"
+    check_subsidy "$pre_h" "$pre_sats" "rolled-back subsidy"
+
+    dummy_tx
 
     echo ""
-    echo "  [BVA — orphan side]"
-    check_subsidy $((boundary - 1)) "$pre_sats" "pre-boundary (orphan side)"
-
-    # Dummy tx: ensures a unique merkle root on re-mine.
-    # Avoids hash collision with the just-invalidated block when mempool is
-    # empty and difficulty/timestamp are identical. (Pattern from sim-mweb.sh)
-    # If sendtoaddress fails (e.g. low balance right after reorg), the hash
-    # guarantee is weaker but the test continues.
-    if ! $RINCOINCLI -regtest sendtoaddress "$ADDR" 0.001 > /dev/null 2>&1; then
-        echo "  [warn] dummy tx failed (low balance after reorg?) -- unique-hash guarantee weaker"
-    fi
-
-    echo ""
-    echo "  [Remining] Mining 101 blocks → restoring chain..."
-    $RINCOINCLI -regtest generatetoaddress 101 "$ADDR" > /dev/null
+    advance_to "$target" "Remining"
     check_height "$target" "after remine"
-
-    echo ""
-    echo "  [BVA — new chain]"
-    check_subsidy $((boundary - 1)) "$pre_sats"  "pre-boundary (new chain)"
-    check_subsidy "$boundary"        "$post_sats" "at-boundary  (new chain)"
+    check_subsidy "$target" "$post_sats" "restored subsidy"
 }
 
 # ---------- Setup ----------
 echo ""
 echo "========================================"
-echo "  Rincoin-Sim: CH x RIN3 Simulation"
+echo "  Rincoin-Sim: CH x RIN3 Simulation v4"
 echo "========================================"
 echo ""
 echo "=== Setup: Reset regtest environment ==="
@@ -179,92 +206,119 @@ rm -rf ~/.rincoin/regtest
 $RINCOIND -regtest -daemon -fallbackfee=0.001
 sleep 3
 
-$RINCOINCLI -regtest createwallet "ch_rin3_reorg" > /dev/null
+$RINCOINCLI -regtest createwallet "ch_rin3_v4" > /dev/null
 ADDR=$($RINCOINCLI -regtest getnewaddress "sim")
 echo "Test address: $ADDR"
 
-# ---------- Phase advance ----------
+# ---------- Section 1: Phase Advance ----------
 #
-#   Phase 0:  blocks     1-209  →  50.00 RIN/block
-#   Phase 1:  blocks   210-419  →  25.00 RIN/block
-#   Phase 2:  blocks   420-629  →  12.50 RIN/block
-#   Phase 3:  blocks   630-839  →   6.25 RIN/block
-#   Phase 4:  blocks  840-2099  →   4.00 RIN/block  (CH dilation + RIN3)
-#   Phase 5:  blocks 2100-4199  →   2.00 RIN/block
-#   Phase 6:  blocks 4200-6299  →   1.00 RIN/block
-#   Terminal: blocks    6300+   →   0.60 RIN/block
+#   Phase 0:  blocks     1-209  ->  50.00 RIN/block
+#   Phase 1:  blocks   210-419  ->  25.00 RIN/block
+#   Phase 2:  blocks   420-629  ->  12.50 RIN/block
+#   Phase 3:  blocks   630-839  ->   6.25 RIN/block
+#   Phase 4:  blocks  840-2099  ->   4.00 RIN/block  (CH dilation + RIN3)
+#   Phase 5:  blocks 2100-4199  ->   2.00 RIN/block
+#   Phase 6:  blocks 4200-6299  ->   1.00 RIN/block
+#   Terminal: blocks    6300+   ->   0.60 RIN/block
 #
 echo ""
-echo "=== Phase Advance: Blocks 1 → 940 ==="
+echo "=== Section 1: Phase Advance (1 -> 6400) ==="
 echo ""
 
-echo "[1/5] Phase 0 (50.00 RIN): Mining blocks 1-209..."
+echo "[1/8] Phase 0 (50.00 RIN): Mining blocks 1-209..."
 $RINCOINCLI -regtest generatetoaddress 209 "$ADDR" > /dev/null
 echo "      Height: $(height)"
 echo ""
 
-echo "[2/5] Phase 1 (25.00 RIN): Mining blocks 210-419..."
+echo "[2/8] Phase 1 (25.00 RIN): Mining blocks 210-419..."
 $RINCOINCLI -regtest generatetoaddress 210 "$ADDR" > /dev/null
 echo "      Height: $(height)"
 echo ""
 
-echo "[3/5] Phase 2 (12.50 RIN): Mining blocks 420-629..."
+echo "[3/8] Phase 2 (12.50 RIN): Mining blocks 420-629..."
 $RINCOINCLI -regtest generatetoaddress 210 "$ADDR" > /dev/null
 echo "      Height: $(height)"
 echo ""
 
-echo "[4/5] Phase 3 ( 6.25 RIN): Mining blocks 630-839..."
+echo "[4/8] Phase 3 ( 6.25 RIN): Mining blocks 630-839..."
 $RINCOINCLI -regtest generatetoaddress 210 "$ADDR" > /dev/null
 echo "      Height: $(height)"
 echo ""
 
-echo "[5/5] FORK:   Mining block 840 (CH activation: 6.25 -> 4.00 RIN  |  RIN3 enforcement ON)..."
+echo "[5/8] FORK: Block 840 (CH activation: 6.25 -> 4.00 RIN  |  RIN3 enforcement ON)..."
 $RINCOINCLI -regtest generatetoaddress 1 "$ADDR" > /dev/null
 echo "      Height: $(height)  <- nRinHashForkHeight reached"
 echo ""
 
-echo "      Mining 99 blocks past fork (buffer for mature UTXOs)..."
-$RINCOINCLI -regtest generatetoaddress 99 "$ADDR" > /dev/null
-echo "      Height: $(height)"
+echo "[6/8] Phase 4 ( 4.00 RIN): Mining blocks 841-2099..."
+advance_to 2099
+echo ""
 
-# ---------- CH Reorg BVA ----------
+echo "[7/8] Phase 5-6 (2.00 -> 1.00 RIN): Mining blocks 2100-6299..."
+advance_to 6299
+echo ""
+
+echo "[8/8] Terminal ( 0.60 RIN): Mining blocks 6300-6400 (buffer for mature UTXOs)..."
+advance_to 6400
+echo ""
+echo "      All phase boundaries mined. Height: $(height)"
+
+# ---------- Section 2: BVA ----------
 echo ""
 echo "========================================"
-echo "  CH Reorg BVA - 4 Boundaries"
+echo "  Section 2: BVA -- Boundary Value Analysis"
 echo "========================================"
 echo ""
-echo "Satoshi reference:"
+echo "  Reading getblockstats for all 8 boundary blocks."
+echo "  No reorgs -- pure subsidy correctness verification."
+echo ""
+echo "  Satoshi reference:"
 echo "    6.25 RIN =  625000000  (Phase 3)"
 echo "    4.00 RIN =  400000000  (Phase 4, CH dilation)"
 echo "    2.00 RIN =  200000000  (Phase 5)"
 echo "    1.00 RIN =  100000000  (Phase 6)"
 echo "    0.60 RIN =   60000000  (Terminal)"
+echo ""
 
-reorg_bva  840  625000000  400000000 "Phase 3->4 (CH dilation + RIN3 activation)"
-reorg_bva 2100  400000000  200000000 "Phase 4->5"
-reorg_bva 4200  200000000  100000000 "Phase 5->6"
-reorg_bva 6300  100000000   60000000 "Phase 6->Terminal"
+echo "[Phase 3->4: CH dilation + RIN3 activation]"
+check_subsidy  839  625000000 "Phase 3 last block"
+check_subsidy  840  400000000 "Phase 4 first block (CH)"
+echo ""
 
-# ---------- RIN3 Wallet Version Tests ----------
+echo "[Phase 4->5]"
+check_subsidy 2099  400000000 "Phase 4 last block"
+check_subsidy 2100  200000000 "Phase 5 first block"
+echo ""
+
+echo "[Phase 5->6]"
+check_subsidy 4199  200000000 "Phase 5 last block"
+check_subsidy 4200  100000000 "Phase 6 first block"
+echo ""
+
+echo "[Phase 6->Terminal]"
+check_subsidy 6299  100000000 "Phase 6 last block"
+check_subsidy 6300   60000000 "Terminal first block"
+
+# ---------- Section 3: RIN3 Wallet Tests ----------
 #
-# txassembler logic:
+# txassembler logic (txassembler.cpp):
 #   last_height = chain tip at send time
 #   if last_height >= nRinHashForkHeight - 1 (= 839) -> use RIN_FORK_TX_VERSION
 #   else                                              -> use legacy nVersion
 #
-# Tip 839:  839 >= 839  -> RIN3    block at h=840 enforces -> accepted
-# Tip 838:  838 >= 839  -> FALSE   block at h=839 no enforcement -> accepted
+# Tip 839: 839 >= 839 -> RIN3   | block at h=840 enforces  -> accepted
+# Tip 838: 838 <  839 -> legacy | block at h=839 no enforce -> accepted
 #
 echo ""
 echo "========================================"
-echo "  RIN3 Wallet Version Tests"
+echo "  Section 3: RIN3 Wallet Version Tests"
 echo "========================================"
 echo ""
 echo "  nRinHashForkHeight (regtest) = 840"
 echo "  RIN_FORK_TX_VERSION = 0x52494e33 = $RIN_FORK_TX_VERSION_DEC"
 echo "  Current height: $(height)"
 
-# [RIN3-1] Positive — wallet uses RIN_FORK_TX_VERSION above fork
+# [RIN3-1] Positive: wallet uses RIN_FORK_TX_VERSION above fork
 echo ""
 echo "------ [RIN3-1] User tx above fork (expect RIN3) ------"
 echo "  Sending 1.0 RIN to self..."
@@ -279,14 +333,14 @@ printf "  Confirmations = %s\n" "$CONFIRMS"
                       || fail "Tx not confirmed above fork"
 check_tx_nversion "$TXID" "$RIN_FORK_TX_VERSION_DEC" "above fork (expect RIN3)"
 
-# [RIN3-2] Reorg to tip=839 — wallet still RIN3, enforced at h=840
+# [RIN3-2] Reorg to tip=839: wallet still RIN3 (839 >= 839), enforced at h=840
 echo ""
 echo "------ [RIN3-2] Reorg to tip=839 (boundary edge) ------"
-echo "  Invalidating block 840 -> chain falls back to h=839..."
+echo "  Invalidating block 840 -> chain falls to h=839..."
 $RINCOINCLI -regtest invalidateblock "$(blockhash 840)"
 check_height 839 "after invalidate(840)"
 
-echo "  Sending 1.0 RIN (wallet sees tip=839 >= 839 -> should use RIN3)..."
+echo "  Sending 1.0 RIN (tip=839 >= 839 -> wallet uses RIN3)..."
 TXID2=$($RINCOINCLI -regtest sendtoaddress "$ADDR" 1.0)
 echo "  Mining block (h=840, enforcement active)..."
 $RINCOINCLI -regtest generatetoaddress 1 "$ADDR" > /dev/null
@@ -298,14 +352,14 @@ printf "  Confirmations = %s\n" "$CONFIRMS2"
                        || fail "Tx rejected at boundary edge"
 check_tx_nversion "$TXID2" "$RIN_FORK_TX_VERSION_DEC" "at fork edge (expect RIN3)"
 
-# [RIN3-3] Reorg to tip=838 — wallet reverts to legacy
+# [RIN3-3] Reorg to tip=838: wallet reverts to legacy (838 < 839)
 echo ""
 echo "------ [RIN3-3] Reorg to tip=838 (below boundary) ------"
-echo "  Invalidating block 839 -> chain falls back to h=838..."
+echo "  Invalidating block 839 -> chain falls to h=838..."
 $RINCOINCLI -regtest invalidateblock "$(blockhash 839)"
 check_height 838 "after invalidate(839)"
 
-echo "  Sending 1.0 RIN (wallet sees tip=838 < 839 -> should use legacy nVersion)..."
+echo "  Sending 1.0 RIN (tip=838 < 839 -> wallet uses legacy nVersion)..."
 TXID3=$($RINCOINCLI -regtest sendtoaddress "$ADDR" 1.0)
 echo "  Mining block (h=839, enforcement NOT yet active)..."
 $RINCOINCLI -regtest generatetoaddress 1 "$ADDR" > /dev/null
@@ -317,7 +371,8 @@ printf "  Confirmations = %s\n" "$CONFIRMS3"
                        || fail "Tx rejected below fork"
 
 NVER3=$($RINCOINCLI -regtest decoderawtransaction \
-        "$($RINCOINCLI -regtest getrawtransaction "$TXID3")" | json_val "['version']")
+    "$($RINCOINCLI -regtest gettransaction "$TXID3" | json_val "['hex']")" \
+    | json_val "['version']")
 printf "    Tx nVersion = %s  (expect anything except %s)\n" \
     "$NVER3" "$RIN_FORK_TX_VERSION_DEC"
 if [ "$NVER3" != "$RIN_FORK_TX_VERSION_DEC" ]; then
@@ -326,11 +381,59 @@ else
     fail "nVersion = $NVER3 (wallet incorrectly used RIN3 below fork)"
 fi
 
-# Restore chain
+# Reset chain to h=840 for Attack Simulation.
+# After RIN3-3, chain is at h=839 -- just mine 1 block.
 echo ""
-echo "  Restoring chain (mining 102 blocks)..."
-$RINCOINCLI -regtest generatetoaddress 102 "$ADDR" > /dev/null
-ok "Chain restored  |  height = $(height)"
+echo "  [Reset for Attack Simulation] Mining 1 block -> h=840..."
+$RINCOINCLI -regtest generatetoaddress 1 "$ADDR" > /dev/null
+check_height 840 "reset to h=840"
+
+# ---------- Section 4: Attack Simulation ----------
+echo ""
+echo "========================================"
+echo "  Section 4: Attack Simulation"
+echo "========================================"
+echo ""
+echo "  Thesis: GetBlockSubsidy is a pure function of block height."
+echo "  No matter how deep the reorg, the correct subsidy is restored."
+echo "  Each scenario leaves the chain at TARGET, ready for the next."
+echo ""
+echo "  Scenario depths:"
+echo "    [A] Minimal Attack      840 ->  839 ->  840  (   1 block)"
+echo "    [B] Super Attack       2100 ->  839 -> 2100  (1261 blocks, Phase 4 erasure)"
+echo "    [C] Cross-Phase Attack 4200 -> 2099 -> 4200  (2101 blocks, Phase 5 erasure)"
+echo "    [D] Terminal Attack    6300 -> 4199 -> 6300  (2101 blocks, Phase 6 erasure)"
+
+# [A] 840 -> 839 -> 840
+#   From h=840: invalidate(840) -> h=839 (6.25 RIN)
+#               remine 1        -> h=840 (4.00 RIN)
+attack_scenario \
+    "[A] Minimal Attack: 840 -> 839 -> 840  (1-block cross-boundary)" \
+    840 840 625000000 840 400000000
+
+# [B] 2100 -> 839 -> 2100
+#   From h=840: advance to h=2100
+#               invalidate(840) -> h=839  (6.25 RIN, 1261-block reorg)
+#               remine to h=2100          (2.00 RIN)
+attack_scenario \
+    "[B] Super Attack: 2100 -> 839 -> 2100  (Phase 4 full erasure)" \
+    2100 840 625000000 2100 200000000
+
+# [C] 4200 -> 2099 -> 4200
+#   From h=2100: advance to h=4200
+#                invalidate(2100) -> h=2099 (4.00 RIN, 2101-block reorg)
+#                remine to h=4200          (1.00 RIN)
+attack_scenario \
+    "[C] Cross-Phase Attack: 4200 -> 2099 -> 4200  (Phase 5 full erasure)" \
+    4200 2100 400000000 4200 100000000
+
+# [D] 6300 -> 4199 -> 6300
+#   From h=4200: advance to h=6300
+#                invalidate(4200) -> h=4199 (2.00 RIN, 2101-block reorg)
+#                remine to h=6300          (0.60 RIN)
+attack_scenario \
+    "[D] Terminal Attack: 6300 -> 4199 -> 6300  (Phase 6 + Terminal erasure)" \
+    6300 4200 200000000 6300 60000000
 
 # ---------- Summary ----------
 echo ""
@@ -339,13 +442,13 @@ printf "  PASS: %d\n" "$PASS"
 printf "  FAIL: %d\n" "$FAIL"
 echo "========================================"
 echo ""
-echo "NOTE: This script tests POSITIVE wallet/consensus paths."
-echo "      Negative consensus tests (legacy tx in block at h>=840 rejected)"
+echo "NOTE: Positive wallet/consensus paths verified here."
+echo "      Negative consensus rejection tests (legacy tx rejected at h>=840)"
 echo "      live in: test/functional/feature_rin3_enforcement.py"
 
 if [ "$FAIL" -eq 0 ]; then
     echo ""
-    echo "ALL TESTS PASSED -- CH x RIN3 reorg resilience confirmed"
+    echo "ALL TESTS PASSED -- CH x RIN3 attack resilience confirmed"
     exit 0
 else
     echo ""
