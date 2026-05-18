@@ -41,6 +41,9 @@ Unlike standard activation tests, our automated suite fully validates the comple
 - **Peg-out**: Secure transfer from MWEB back to Transparent addresses.
 - **Reorg Resilience**: Proves MWEB transaction robustness during blockchain rollbacks (`invalidateblock`) and re-mining events.
 
+### 3. Consensus Integrity Validation (RIN3 nVersion & Reorg Determinism)
+Beyond economics and privacy, this environment validates that the **RIN3 transaction-version marker** (`nVersion = 0x52494e33`) is emitted and enforced exactly at the fork height, and that subsidy issuance is **deterministic under deep chain reorganizations**. The consolidated `sim-ch-rin3.sh` suite proves that `GetBlockSubsidy` is a pure function of block height — the correct reward is always restored after a rollback, regardless of reorg depth (validated up to a 2,101-block, two-phase reorg).
+
 ---
 
 ## 📊 Scaled Emission Schedule (Simulation: 1/1000)
@@ -96,6 +99,14 @@ Validates Peg-in, Peg-out (with wallet isolation), and Chain Reorganization (Reo
 ```bash
 ./scripts/sim-mweb.sh
 ```
+
+### Combined CH × RIN3 & Attack Resilience Simulation
+The most comprehensive single-run suite. In one regtest session it validates the full emission schedule (BVA), RIN3 wallet/consensus nVersion enforcement at the fork boundary, and subsidy determinism under four escalating reorg-attack scenarios (max depth: 2,101 blocks across two economic phases).
+```bash
+./scripts/sim-ch-rin3.sh
+```
+> Companion negative consensus test (node-level rejection of legacy-nVersion
+> blocks at height ≥ fork): `test/functional/feature_rin3_enforcement.py`
 
 ---
 
@@ -301,7 +312,7 @@ echo "Receiver (MWEB)    : $MWEB_ADDR"
 ---
 
 ### ⚡ MWEB Peg-In Quick Validation (One-Shot Script)
-For rapid end-to-end verification, paste the entire block below into your terminal. "This script validates Peg-in activation only. For full lifecycle validation (Peg-in, Peg-out, and Reorg), use `./scripts/sim-mweb.sh`."
+For rapid end-to-end verification, paste the entire block below into your terminal. This script validates Peg-in activation only. For full lifecycle validation (Peg-in, Peg-out, and Reorg), use `./scripts/sim-mweb.sh`.
 
 ```bash
 # ===== MWEB Full Simulation (One-shot) =====
@@ -412,12 +423,56 @@ The presence of two MWEB addresses is the intended behavior and cryptographicall
 
 ---
 
+## 🔐 CH × RIN3 & Attack Resilience Simulation
+
+`./scripts/sim-ch-rin3.sh` is the consolidated validation entry point. It runs four sequential sections in a single regtest session:
+
+| Section | Scope | Coverage |
+| :--- | :--- | :--- |
+| **1. Phase Advance** | Mine blocks 1 → 6,400 | All 8 phase boundaries materialized |
+| **2. BVA** | Boundary Value Analysis | Subsidy correctness at 839/840, 2099/2100, 4199/4200, 6299/6300 |
+| **3. RIN3 Wallet Tests** | nVersion enforcement | Wallet emits `0x52494e33` at/above fork, legacy below |
+| **4. Attack Simulation** | Reorg determinism | 4 escalating rollback scenarios (max depth 2,101 blocks) |
+
+### RIN3 nVersion Enforcement (Section 3)
+
+`nRinHashForkHeight` (regtest) = **840**. RIN3 marker = `0x52494e33` = `1380535859`.
+Wallet rule (`txassembler.cpp`): if chain tip at send time `>= 839` → emit RIN3; else legacy nVersion.
+
+| Scenario | Chain Tip at Send | Wallet nVersion | Mined / Enforced At | Result |
+| :--- | :--- | :--- | :--- | :--- |
+| **[RIN3-1]** Above fork | h > 840 | `0x52494e33` (RIN3) | h > 840 (enforced) | ✅ PASS |
+| **[RIN3-2]** Boundary edge | tip = 839 (839 ≥ 839) | `0x52494e33` (RIN3) | h = 840 (enforced) | ✅ PASS |
+| **[RIN3-3]** Below boundary | tip = 838 (838 < 839) | `2` (legacy) | h = 839 (not yet enforced) | ✅ PASS |
+
+### Attack Simulation (Section 4)
+
+**Thesis:** `GetBlockSubsidy` is a pure function of block height. No matter how deep the reorg, the correct subsidy is restored on re-mine.
+
+| # | Scenario | Reorg Path | Depth | Rolled-back → Restored | Result |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **[A]** | Minimal | 840 → 839 → 840 | 1 block | 6.25 → 4.00 RIN | ✅ PASS |
+| **[B]** | Super | 2,100 → 839 → 2,100 | 1,261 blocks | 6.25 → 2.00 RIN (Phase 4 erased) | ✅ PASS |
+| **[C]** | Cross-Phase | 4,200 → 2,099 → 4,200 | 2,101 blocks | 4.00 → 1.00 RIN (Phase 5 erased) | ✅ PASS |
+| **[D]** | Terminal | 6,300 → 4,199 → 6,300 | 2,101 blocks | 2.00 → 0.60 RIN (Phase 6 + Terminal erased) | ✅ PASS |
+
+> *Max reorg depth: 2,101 blocks across 2 economic phases.*  
+> *Companion negative consensus test: `test/functional/feature_rin3_enforcement.py`*
+
+> *Test Date: 2026-05-17*  
+> *Environment: regtest (1/1000 scale)*  
+> *Network: rincoin-sim (mainnet & testnet disabled)*
+
+---
+
 ### 📸 Proof of Simulation (Screenshot)
 ![Validation Results at Block 6300](doc/assets/simulation-bva-results.png)
 
 ![MWEB Validation Results](doc/assets/simulation-mimble-wimble-results.png)
 
 ![MWEB Reorg Validation Results](doc/assets/simulation-mweb-reorg-results.png)
+
+![CH × RIN3 & Attack Resilience Results](doc/assets/simulation-rin3-results.png)
 
 ---
 
