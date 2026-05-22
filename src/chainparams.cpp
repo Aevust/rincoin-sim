@@ -110,8 +110,8 @@ public:
         consensus.nPowTargetSpacing = 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
-        consensus.nRuleChangeActivationThreshold = 6048; // 75% of 8064
-        consensus.nMinerConfirmationWindow = 8064; // nPowTargetTimespan / nPowTargetSpacing * 4
+        consensus.nRuleChangeActivationThreshold = 5940; // 75% of 7920
+        consensus.nMinerConfirmationWindow = 7920; // nPowTargetTimespan / nPowTargetSpacing * 4
         consensus.DGWHeight = 30000; // Dark Gravity Wave (DGW) difficulty adjustment algorithm
         consensus.nRinHashForkHeight = 840000; // RIN3 nVersion replay protection
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
@@ -162,8 +162,8 @@ public:
         // service bits we want, but we should get them updated to support all service bits wanted by any
         // release ASAP to avoid it where possible.
         
-        vSeeds.emplace_back("seed.rincoin.net");  // official DNS seeder 1
-        vSeeds.emplace_back("seed.rincoin.org");  // official DNS seeder 2
+        vSeeds.emplace_back("seed.rincoin.org");  // official DNS seeder 1
+        vSeeds.emplace_back("seed.rincoin.net");  // official DNS seeder 2
 
         base58Prefixes[PUBKEY_ADDRESS] = {60};  // "R..."
         base58Prefixes[SCRIPT_ADDRESS] = {122}; // "r..."
