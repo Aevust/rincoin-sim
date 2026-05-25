@@ -42,7 +42,7 @@ from test_framework.test_framework import BitcoinTestFramework
 from test_framework.messages import (
     CTransaction, CTxIn, CTxOut, COutPoint, COIN,
 )
-from test_framework.blocktools import create_block, create_coinbase
+from test_framework.blocktools import create_block, create_coinbase, add_witness_commitment
 from test_framework.util import assert_equal, assert_raises_rpc_error
 
 RIN_FORK_TX_VERSION = 0x52494e33   # "RIN3" ASCII = 1380535859
@@ -59,7 +59,14 @@ class Rin3EnforcementTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
         self.setup_clean_chain = True
-        self.extra_args = [["-fallbackfee=0.001", "-acceptnonstdtxn=0"]]
+        self.extra_args = [[
+            "-fallbackfee=0.001",
+            "-acceptnonstdtxn=0",
+            # Disable MWEB for this test: MWEB+RIN3 interaction is covered by
+            # feature_rin3_mweb_exemption.py. Use far-future timestamp (~2286)
+            # as a practical equivalent of NEVER_ACTIVE.
+            "-vbparams=mweb:9999999999:9999999999",
+        ]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -122,16 +129,28 @@ class Rin3EnforcementTest(BitcoinTestFramework):
         tip_height = node.getblockcount()
         block_time = node.getblock(tip_hash)["time"] + 1
 
+        # Ask rincoind for the correct block version via getblocktemplate.
+        # Hardcoding nVersion (e.g. 4) is insufficient: Rincoin requires
+        # BIP9-style version (0x20000000+). getblocktemplate always returns
+        # the correct value for the current chain state.
+        tmpl    = node.getblocktemplate({"rules": ["mweb", "segwit"]})
+        version = tmpl["version"]
+
         block = create_block(
             int(tip_hash, 16),
             create_coinbase(tip_height + 1),
             block_time,
+            version=version,
         )
         for tx in extra_txs:
             block.vtx.append(tx)
+        # add_witness_commitment inserts the SegWit witness commitment into the
+        # coinbase output and recalculates the coinbase hash. Required for all
+        # SegWit-active blocks; omitting it causes "unexpected-witness" rejection.
+        add_witness_commitment(block)
         block.hashMerkleRoot = block.calc_merkle_root()
         block.solve()
-        self.log.info(f"  Built block at h={tip_height + 1}, "
+        self.log.info(f"  Built block at h={tip_height + 1}, nVersion={version:#010x}, "
                       f"vtx={len(block.vtx)} (coinbase + {len(extra_txs)} user txs)")
         return block
 
@@ -328,12 +347,18 @@ class Rin3EnforcementTest(BitcoinTestFramework):
         self.log.info(f"  Coinbase nVersion will be set by create_coinbase() (not RIN3).")
         self.log.info(f"  ContextualCheckBlock exempts coinbase from RIN3 check.")
 
+        # Use getblocktemplate for correct version (same reason as _build_block).
+        tmpl = node.getblocktemplate({"rules": ["mweb", "segwit"]})
+
         block = create_block(
             int(tip_hash, 16),
             create_coinbase(tip_height + 1),
             block_time,
+            version=tmpl["version"],
         )
-        # No extra user txs — coinbase-only block
+        # No extra user txs — coinbase-only block.
+        # add_witness_commitment is still required to satisfy SegWit validation.
+        add_witness_commitment(block)
         block.hashMerkleRoot = block.calc_merkle_root()
         block.solve()
 
