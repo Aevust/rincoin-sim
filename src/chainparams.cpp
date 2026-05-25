@@ -124,7 +124,6 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeoutHeight = 2370816; // 364 days later
 
         // Deployment of MWEB (LIP-0002, LIP-0003, and LIP-0004)
-        // Deployment of MWEB (LIP-0002, LIP-0003, and LIP-0004)
         // Intentionally deferred: activated in a future release after SQLite
         // descriptor wallet integration completes. Avoids creating BDB-locked
         // MWEB key data requiring complex migration. (Testnet: Block 840)
