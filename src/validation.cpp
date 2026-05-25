@@ -598,7 +598,7 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // HogEx is only valid in a block, not as a loose transaction
     if (tx.IsHogEx())
         return state.Invalid(TxValidationResult::TX_CONSENSUS, "hogex");
-		
+
     // Rather not work on nonstandard transactions (unless -testnet/-regtest)
     std::string reason;
     if (fRequireStandard && !IsStandardTx(tx, reason))
@@ -1982,7 +1982,7 @@ static unsigned int GetBlockScriptFlags(const CBlockIndex* pindex, const Consens
     AssertLockHeld(cs_main);
 
     unsigned int flags = SCRIPT_VERIFY_NONE;
-    
+
     // Start enforcing P2SH (BIP16)
     if (pindex->nHeight >= consensusparams.BIP16Height) {
         flags |= SCRIPT_VERIFY_P2SH;
@@ -2122,7 +2122,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     // Now that the whole chain is irreversibly beyond that time it is applied to all blocks except the
     // two in the chain that violate it. This prevents exploiting the issue against nodes during their
     // initial block download.
-    
+
     bool fEnforceBIP30 = true;
     //bool fEnforceBIP30 = !((pindex->nHeight==91842 && pindex->GetBlockHash() == uint256S("0x00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec")) ||
     //                       (pindex->nHeight==91880 && pindex->GetBlockHash() == uint256S("0x00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")));
@@ -3842,7 +3842,7 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     if (!MWEB::Node::ContextualCheckBlock(block, consensusParams, pindexPrev, state)) {
         return false;
     }
-    
+
     // Rincoin RIN3 fork: enforce RIN_FORK_TX_VERSION on user transactions.
     // Exemptions: coinbase (miner reward), HogEx (MWEB integration tx),
     // and MWEBOnly (MWEB-to-MWEB tx) — all are system-generated, not
@@ -3861,7 +3861,7 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     }
 
     return true;
-}    
+}
 
 // Original signature — non-optimized path computes both hashes and forwards
 bool BlockManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
