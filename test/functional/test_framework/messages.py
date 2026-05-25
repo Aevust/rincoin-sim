@@ -2,6 +2,7 @@
 # Copyright (c) 2010 ArtForz -- public domain half-a-node
 # Copyright (c) 2012 Jeff Garzik
 # Copyright (c) 2010-2020 The Bitcoin Core developers
+# Copyright (c) 2024-2025 The Rincoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Bitcoin test framework primitive and message structures
@@ -29,7 +30,25 @@ import socket
 import struct
 import time
 
-import litecoin_scrypt
+# RinHash: BLAKE3 -> Argon2d -> SHA3-256 (replaces litecoin_scrypt)
+import hashlib as _hashlib
+import blake3 as _blake3
+from argon2.low_level import hash_secret_raw as _argon2_raw, Type as _Argon2Type
+
+def rinhash(header_bytes: bytes) -> bytes:
+    """Pure-Python RinHash: matches rinhash.cpp (BLAKE3 -> Argon2d -> SHA3-256)."""
+    b3 = _blake3.blake3(header_bytes).digest()
+    a2 = _argon2_raw(
+        secret=b3,
+        salt=b"RinCoinSalt",
+        time_cost=2,
+        memory_cost=64,
+        parallelism=1,
+        hash_len=32,
+        type=_Argon2Type.D,
+    )
+    return _hashlib.sha3_256(a2).digest()
+
 from test_framework.siphash import siphash256
 from test_framework.util import hex_str_to_bytes, assert_equal
 
@@ -703,7 +722,7 @@ class CTransaction:
 
 class CBlockHeader:
     __slots__ = ("hash", "hashMerkleRoot", "hashPrevBlock", "nBits", "nNonce",
-                 "nTime", "nVersion", "sha256", "scrypt256")
+                 "nTime", "nVersion", "sha256", "rinhash256")
 
     def __init__(self, header=None):
         if header is None:
@@ -717,7 +736,7 @@ class CBlockHeader:
             self.nNonce = header.nNonce
             self.sha256 = header.sha256
             self.hash = header.hash
-            self.scrypt256 = header.scrypt256
+            self.rinhash256 = header.rinhash256
             self.calc_sha256()
 
     def set_null(self):
@@ -729,7 +748,7 @@ class CBlockHeader:
         self.nNonce = 0
         self.sha256 = None
         self.hash = None
-        self.scrypt256 = None
+        self.rinhash256 = None
 
     def deserialize(self, f):
         self.nVersion = struct.unpack("<i", f.read(4))[0]
@@ -740,7 +759,7 @@ class CBlockHeader:
         self.nNonce = struct.unpack("<I", f.read(4))[0]
         self.sha256 = None
         self.hash = None
-        self.scrypt256 = None
+        self.rinhash256 = None
 
     def serialize(self):
         r = b""
@@ -763,11 +782,11 @@ class CBlockHeader:
             r += struct.pack("<I", self.nNonce)
             self.sha256 = uint256_from_str(hash256(r))
             self.hash = encode(hash256(r)[::-1], 'hex_codec').decode('ascii')
-            self.scrypt256 = uint256_from_str(litecoin_scrypt.getPoWHash(r))
+            self.rinhash256 = uint256_from_str(rinhash(r))
 
     def rehash(self):
         self.sha256 = None
-        self.scrypt256 = None
+        self.rinhash256 = None
         self.calc_sha256()
         return self.sha256
 
@@ -842,7 +861,7 @@ class CBlock(CBlockHeader):
     def is_valid(self):
         self.calc_sha256()
         target = uint256_from_compact(self.nBits)
-        if self.scrypt256 > target:
+        if self.rinhash256 > target:
             return False
         for tx in self.vtx:
             if not tx.is_valid():
@@ -854,7 +873,7 @@ class CBlock(CBlockHeader):
     def solve(self):
         self.rehash()
         target = uint256_from_compact(self.nBits)
-        while self.scrypt256 > target:
+        while self.rinhash256 > target:
             self.nNonce += 1
             self.rehash()
 
