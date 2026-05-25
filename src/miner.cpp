@@ -253,7 +253,7 @@ bool BlockAssembler::TestPackageTransactions(const CTxMemPool::setEntries& packa
                 return false;
             }
         }
-        
+
     }
     return true;
 }
