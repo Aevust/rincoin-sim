@@ -293,6 +293,22 @@ echo "[Phase 6->Terminal]"
 check_subsidy 6299  100000000 "Phase 6 last block"
 check_subsidy 6300   60000000 "Terminal first block"
 
+# ---------- Reset chain to fork height for minimal-attack baseline ----------
+# Section 2 (BVA) leaves the chain at h=6400. advance_to is forward-only,
+# so without this reset scenario [A]'s advance_to 840 is a no-op and [A]
+# would invalidate block 840 from h=6400 -- a 5561-block reorg, not the
+# intended 1-block minimal attack. Roll back to h=840 so [A] runs as
+# designed; [B]..[D-2] then rebuild the chain upward.
+echo ""
+echo "  Resetting chain to h=840 for the minimal-attack baseline..."
+$RINCOINCLI -regtest invalidateblock "$(blockhash 841)"
+RESET_H=$(height)
+if [ "$RESET_H" != "840" ]; then
+    echo "  [ERROR] Reset failed: expected h=840, got h=$RESET_H"
+    exit 1
+fi
+echo "  Chain reset to h=$RESET_H."
+
 # ---------- Section 3: Attack Simulation ----------
 echo ""
 echo "========================================================"
