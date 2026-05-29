@@ -1,5 +1,6 @@
 # Rincoin-Sim Build & Test Procedure
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20363269.svg)](https://doi.org/10.5281/zenodo.20363269)
 **Environment**: Ubuntu 24.04 LTS (VirtualBox)
 **Target**: rincoin-sim v1.0.7 — 1/1000 scale functional test environment
 **Verified**: 2026-05-23

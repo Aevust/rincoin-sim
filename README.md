@@ -3,6 +3,7 @@
 ![Version](https://img.shields.io/badge/version-1.0.6.1--sim-red.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-REGTEST_ONLY-critical.svg)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20363269.svg)](https://doi.org/10.5281/zenodo.20363269)
 
 > ⚠️ **CRITICAL WARNING: REGTEST ONLY / DO NOT MERGE TO MAINNET** ⚠️
 > 
