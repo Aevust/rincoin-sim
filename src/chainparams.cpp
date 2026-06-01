@@ -119,9 +119,15 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
 
         // Deployment of Taproot (BIPs 340-342)
+        // Intentionally deferred: Litecoin's height-based Taproot activation
+        // (nStartHeight=2161152) is incompatible with Rincoin's
+        // nMinerConfirmationWindow=7920 (Litecoin uses 8064; Rincoin uses 7920
+        // due to 60s blocks and 33h retarget timespan).
+        // Taproot activation may be revisited via a future RIP; for now follow
+        // the same "intentionally deferred" pattern as MWEB.
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].bit = 2;
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartHeight = 2161152; // End November 2021
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeoutHeight = 2370816; // 364 days later
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = Consensus::BIP9Deployment::NEVER_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
 
         // Deployment of MWEB (LIP-0002, LIP-0003, and LIP-0004)
         // Intentionally deferred: activated in a future release after SQLite
