@@ -6,14 +6,25 @@ welcome to contribute towards development in the form of peer review, testing
 and patches. This document explains the practical process and guidelines for
 contributing.
 
-First, in terms of structure, there is no particular concept of "Bitcoin Core
-developers" in the sense of privileged people. Open source often naturally
-revolves around a meritocracy where contributors earn trust from the developer
-community over time. Nevertheless, some hierarchy is necessary for practical
-purposes. As such, there are repository "maintainers" who are responsible for
-merging pull requests, as well as a "lead maintainer" who is responsible for the
-release cycle as well as overall merging, moderation and appointment of
-maintainers.
+First, in terms of structure, contribution is open to anyone and trust is
+earned through sustained, high-quality work. Open source naturally revolves
+around a meritocracy where contributors earn trust from the community over
+time. Nevertheless, some structure is necessary for practical purposes.
+
+The Rincoin Core governance roles are defined authoritatively in
+[RIP-0001](https://rips.rincoin.org). In summary:
+
+* The **Founder** (@ysmreg) is the owner of the canonical @Rin-coin GitHub
+  organization and holds final merge authority. No change reaches the
+  canonical repository without the Founder's approval.
+* The **Core Strategic Authority** (the coalition of Core role holders) is the
+  final decision-making body for the project.
+* Other Core roles (Core Authority Lead, Core Research Lead, Principal
+  Architect) support development, research, and strategy as described in the
+  governance documents.
+
+This document covers the practical contribution process. It does not override
+RIP-0001; where they appear to differ, RIP-0001 governs.
 
 Getting Started
 ---------------
@@ -27,18 +38,18 @@ section below.
 
 Before you start contributing, familiarize yourself with the Rincoin Core build
 system and tests. Refer to the documentation in the repository on how to build
-Bitcoin Core and how to run the unit tests, functional tests, and fuzz tests.
+Rincoin Core and how to run the unit tests, functional tests, and fuzz tests.
+For consensus-affecting work, also familiarize yourself with `rincoin-sim`, the
+companion 1/1000-scale regtest simulation environment used to validate
+consensus changes before mainnet deployment.
 
 There are many open issues of varying difficulty waiting to be fixed.
 If you're looking for somewhere to start contributing, check out the
-[good first issue](https://github.com/bitcoin/bitcoin/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
+[good first issue](https://github.com/Rin-coin/rincoin/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
 list or changes that are
-[up for grabs](https://github.com/bitcoin/bitcoin/issues?utf8=%E2%9C%93&q=label%3A%22Up+for+grabs%22).
+[up for grabs](https://github.com/Rin-coin/rincoin/issues?q=is%3Aopen+is%3Aissue+label%3A%22up+for+grabs%22).
 Some of them might no longer be applicable. So if you are interested, but
 unsure, you might want to leave a comment on the issue first.
-
-You may also participate in the weekly
-[Bitcoin Core PR Review Club](https://bitcoincore.reviews/) meeting.
 
 ### Good First Issue Label
 
@@ -56,20 +67,15 @@ and is also an effective way to request assistance if and when you need it.
 Communication Channels
 ----------------------
 
-Most communication about Bitcoin Core development happens on IRC, in the
-`#bitcoin-core-dev` channel on Freenode. The easiest way to participate on IRC is
-with the web client, [webchat.freenode.net](https://webchat.freenode.net/). Chat
-history logs can be found
-on [http://www.erisian.com.au/bitcoin-core-dev/](http://www.erisian.com.au/bitcoin-core-dev/)
-and [http://gnusha.org/bitcoin-core-dev/](http://gnusha.org/bitcoin-core-dev/).
+Most communication about Rincoin Core development happens on the official
+Rincoin Discord server (owner: @Aevust), linked from
+[rincoin.org](https://rincoin.org). Discussion about codebase improvements
+happens in GitHub issues and pull requests.
 
-Discussion about codebase improvements happens in GitHub issues and pull
-requests.
-
-The developer
-[mailing list](https://groups.google.com/forum/#!forum/litecoin-dev)
-should be used to discuss complicated or controversial consensus or P2P protocol changes before working on
-a patch set.
+Complicated or controversial consensus or P2P protocol changes must be raised
+as a Rincoin Improvement Proposal (RIP) at
+[rips.rincoin.org](https://rips.rincoin.org) before working on a patch set.
+See the "Decision Making" Process section below.
 
 
 Contributor Workflow
@@ -85,25 +91,10 @@ To contribute a patch, the workflow is as follows:
   1. Create topic branch
   1. Commit patches
 
-For GUI-related issues or pull requests, the https://github.com/bitcoin-core/gui repository should be used.
-For all other issues and pull requests, the https://github.com/bitcoin/bitcoin node repository should be used.
-
-The master branch for all monotree repositories is identical.
-
-As a rule of thumb, everything that only modifies `src/qt` is a GUI-only pull
-request. However:
-
-* For global refactoring or other transversal changes the node repository
-  should be used.
-* For GUI-related build system changes, the node repository should be used
-  because the change needs review by the build systems reviewers.
-* Changes in `src/interfaces` need to go to the node repository because they
-  might affect other components like the wallet.
-
-For large GUI changes that include build system and interface changes, it is
-recommended to first open a pull request against the GUI repository. When there
-is agreement to proceed with the changes, a pull request with the build system
-and interfaces changes can be submitted to the node repository.
+All issues and pull requests, including GUI changes, are submitted to the
+canonical node repository at https://github.com/Rin-coin/rincoin. Unlike
+Bitcoin Core, Rincoin Core is a single integrated repository; there is no
+separate GUI repository.
 
 The project coding conventions in the [developer notes](doc/developer-notes.md)
 must be followed.
@@ -117,12 +108,22 @@ fixes or code moves with actual code changes.
 Make sure each individual commit is hygienic: that it builds successfully on its
 own without warnings, errors, regressions, or test failures.
 
-Commit messages should be verbose by default consisting of a short subject line
-(50 chars max), a blank line and detailed explanatory text as separate
-paragraph(s), unless the title alone is self-explanatory (like "Corrected typo
-in init.cpp") in which case a single title line is sufficient. Commit messages should be
-helpful to people reading your code in the future, so explain the reasoning for
-your decisions. Further explanation [here](https://chris.beams.io/posts/git-commit/).
+Commit messages follow the [Conventional Commits](https://www.conventionalcommits.org/)
+format: a `type(scope): subject` line, an optional blank line, and an optional
+detailed body explaining the *reasoning* for the change. The subject line
+should be concise; wrap the body at roughly 50–70 characters per line.
+Examples:
+
+    feat(consensus): enforce RIN3 nVersion at fork height
+    fix(mempool): prevent zombie tx DoS during CH activation
+    docs(rip): clarify dynamic subsidy scaling formula
+
+Commit messages should be helpful to people reading your code in the future, so
+explain the reasoning for your decisions. Further explanation
+[here](https://chris.beams.io/posts/git-commit/).
+
+All commits MUST be GPG-signed (`git commit -S`). Unsigned commits will not be
+merged into the canonical repository.
 
 If a particular commit references another issue, please add the reference. For
 example: `refs #1234` or `fixes #4321`. Using the `fixes` or `closes` keywords
@@ -143,7 +144,7 @@ the pull request affects. Valid areas as:
 
   - `consensus` for changes to consensus critical code
   - `doc` for changes to the documentation
-  - `qt` or `gui` for changes to litecoin-qt
+  - `qt` or `gui` for changes to rincoin-qt
   - `log` for changes to log messages
   - `mining` for changes to the mining code
   - `net` or `p2p` for changes to the peer-to-peer network code
@@ -157,27 +158,27 @@ the pull request affects. Valid areas as:
 
 Examples:
 
-    consensus: Add new opcode for BIP-XXXX OP_CHECKAWESOMESIG
+    consensus: Enforce RIN3 nVersion per RIP-0009
     net: Automatically create onion service, listen on Tor
-    qt: Add feed bump button
+    qt: Add fee bump button
     log: Fix typo in log message
 
 The body of the pull request should contain sufficient description of *what* the
 patch does, and even more importantly, *why*, with justification and reasoning.
-You should include references to any discussions (for example, other issues or
-mailing list discussions).
+You should include references to any discussions (for example, other issues,
+Discord threads, or RIP discussions).
 
 The description for a new pull request should not contain any `@` mentions. The
 PR description will be included in the commit message when the PR is merged and
 any users mentioned in the description will be annoyingly notified each time a
-fork of Bitcoin Core copies the merge. Instead, make any username mentions in a
+fork of Rincoin Core copies the merge. Instead, make any username mentions in a
 subsequent comment to the PR.
 
 ### Translation changes
 
-Note that translations should not be submitted as pull requests. Please see
-[Translation Process](https://github.com/bitcoin/bitcoin/blob/master/doc/translation_process.md)
-for more information on helping with translations.
+Translation infrastructure for Rincoin Core is not yet established. Until it is,
+please open an issue before submitting translation-related changes so they can
+be coordinated rather than overwritten later.
 
 ### Work in Progress Changes and Requests for Comments
 
@@ -282,16 +283,13 @@ workload on reviewing.
 "Decision Making" Process
 -------------------------
 
-The following applies to code changes to the Rincoin Core project (and related
-projects such as libsecp256k1), and is not to be confused with overall Rincoin
-Network Protocol consensus changes.
+The following applies to code changes to the Rincoin Core project, and is not to
+be confused with overall Rincoin Network Protocol consensus changes (which are
+governed by the RIP process).
 
-Whether a pull request is merged into Rincoin Core rests with the project merge
-maintainers and ultimately the project lead.
-
-Maintainers will take into consideration if a patch is in line with the general
-principles of the project; meets the minimum standards for inclusion; and will
-judge the general consensus of contributors.
+Whether a pull request is merged into Rincoin Core rests with the Founder
+(@ysmreg) as the holder of final merge authority, taking into account the
+review and consensus of Core role holders and the wider contributor community.
 
 In general, all pull requests must:
 
@@ -306,11 +304,13 @@ In general, all pull requests must:
   - Change relevant comments and documentation when behaviour of code changes.
 
 Patches that change Rincoin consensus rules are considerably more involved than
-normal because they affect the entire ecosystem and so must be preceded by
-extensive mailing list discussions and have a numbered BIP. While each case will
-be different, one should be prepared to expend more time and effort than for
-other kinds of patches because of increased peer review and consensus building
-requirements.
+normal because they affect the entire ecosystem and so must be preceded by a
+ratified or draft Rincoin Improvement Proposal (RIP) at
+[rips.rincoin.org](https://rips.rincoin.org), and validated on `rincoin-sim` at
+1/1000 regtest scale. While each case will be different, one should be prepared
+to expend more time and effort than for other kinds of patches because of
+increased peer review and consensus-building requirements. Final ratification
+rests with the Founder (@ysmreg) and the Core Strategic Authority per RIP-0001.
 
 
 ### Peer Review
@@ -320,7 +320,7 @@ request. Typically reviewers will review the code for obvious errors, as well as
 test out the patch set and opine on the technical merits of the patch. Project
 maintainers take into account the peer review when determining if there is
 consensus to merge a pull request (remember that discussions may have been
-spread out over GitHub, mailing list and IRC discussions).
+spread out over GitHub, Discord, and RIP discussions).
 
 #### Conceptual Review
 
@@ -359,9 +359,11 @@ mistakes could be very costly to the wider community. This includes refactoring
 of consensus-critical code.
 
 Where a patch set proposes to change the Rincoin consensus, it must have been
-discussed extensively on the mailing list and IRC, be accompanied by a widely
-discussed BIP and have a generally widely perceived technical consensus of being
-a worthwhile change based on the judgement of the maintainers.
+proposed as a Rincoin Improvement Proposal (RIP) at
+[rips.rincoin.org](https://rips.rincoin.org), discussed openly on the official
+Discord, validated on `rincoin-sim`, and have a generally perceived technical
+consensus of being a worthwhile change, subject to final ratification by the
+Founder (@ysmreg) and the Core Strategic Authority per RIP-0001.
 
 ### Finding Reviewers
 
@@ -381,7 +383,7 @@ about:
     that personally, though! Instead, take another critical look at what you are suggesting
     and see if it: changes too much, is too broad, doesn't adhere to the
     [developer notes](doc/developer-notes.md), is dangerous or insecure, is messily written, etc.
-    Identify and address any of the issues you find. Then ask e.g. on IRC if someone could give
+    Identify and address any of the issues you find. Then ask e.g. on Discord if someone could give
     their opinion on the concept itself.
   - It may be because your code is too complex for all but a few people, and those people
     may not have realized your pull request even exists. A great way to find people who
@@ -389,7 +391,7 @@ about:
     [Git Blame feature](https://help.github.com/articles/tracing-changes-in-a-file/). Simply
     look up who last modified the code you are changing and see if you can find
     them and give them a nudge. Don't be incessant about the nudging, though.
-  - Finally, if all else fails, ask on IRC or elsewhere for someone to give your pull request
+  - Finally, if all else fails, ask on Discord or elsewhere for someone to give your pull request
     a look. If you think you've been waiting for an unreasonably long time (say,
     more than a month) for no particular reason (a few lines changed, etc.),
     this is totally fine. Try to return the favor when someone else is asking
@@ -416,16 +418,15 @@ Github-Pull: #<PR number>
 Rebased-From: <commit hash of the original commit>
 ```
 
-Have a look at [an example backport PR](
-https://github.com/bitcoin/bitcoin/pull/16189).
-
-Also see the [backport.py script](
-https://github.com/bitcoin-core/bitcoin-maintainer-tools#backport).
+When backporting a fix that originates upstream (Bitcoin Core or Litecoin Core),
+also reference the upstream PR or commit so the provenance of the change is
+clear and so upstream security patches can be tracked.
 
 Release Policy
 --------------
 
-The project leader is the release manager for each Rincoin Core release.
+The Founder (@ysmreg) is the release manager for each Rincoin Core release,
+in coordination with the Core Strategic Authority.
 
 Copyright
 ---------
