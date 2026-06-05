@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Rincoin Official Site
+    url: https://rincoin.org
+    about: Official site operated by the Rincoin Core Authority. Start here for releases, documentation, and canonical announcements.
+  - name: Rincoin Community & Support
+    url: https://discord.gg/H4Du5YuqFa
+    about: General questions, usage help, and community discussion. The GitHub issue tracker is for technical bug reports only.
+  - name: Rincoin Improvement Proposals (RIPs)
+    url: https://rips.rincoin.org
+    about: Proposals affecting consensus, subsidy, P2P, mempool policy, or wallet format must go through the RIP process — not a GitHub issue.
+  - name: Security disclosure
+    url: https://github.com/Rin-coin/rincoin/blob/master/SECURITY.md
+    about: Do NOT open a public issue for security vulnerabilities. Follow the coordinated disclosure process in SECURITY.md (contact info@rincoin.org, GPG-encrypted preferred).
+  - name: Security disclosure (backup)
+    url: https://github.com/Aevust/rincoin-rips/blob/main/SECURITY.md
+    about: Development reference for the security policy, maintained in the RIPs repository. Contact info@rincoin.org for vulnerability reports.
