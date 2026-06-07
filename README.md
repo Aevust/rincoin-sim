@@ -1,9 +1,9 @@
 # Rincoin-Sim: Customized Halving & MWEB Simulation Environment
 
-![Version](https://img.shields.io/badge/version-1.0.6.1--sim-red.svg)
+![Version](https://img.shields.io/badge/version-1.0.7--sim-red.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-REGTEST_ONLY-critical.svg)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20363269.svg)](https://doi.org/10.5281/zenodo.20363269)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20363269-blue)](https://doi.org/10.5281/zenodo.20363269)
 
 > ⚠️ **CRITICAL WARNING: REGTEST ONLY / DO NOT MERGE TO MAINNET** ⚠️
 > 
@@ -119,10 +119,10 @@ dependencies.
 
 ```bash
 # 1. Extract the release tarball
-tar -xzf rincoin-sim-v1.0.6.1-linux-x86_64.tar.gz
+tar -xzf rincoin-sim-v1.0.7-linux-x86_64.tar.gz
 
 # 2. Navigate to the project root directory
-cd rincoin-sim-v1.0.6.1-linux-x86_64/
+cd rincoin-sim-v1.0.7-linux-x86_64/
 ```
 
 > 💡 **Automated scripts** (`./scripts/sim-ch.sh`, `./scripts/sim-mweb.sh`) must be
@@ -134,7 +134,7 @@ cd bin/
 ```
 
 > 💡 All manual commands below assume you are inside the
-> `rincoin-sim-v1.0.6.1-linux-x86_64/bin/` directory.
+> `rincoin-sim-v1.0.7-linux-x86_64/bin/` directory.
 
 Launch the simulator daemon in regtest mode:
 
@@ -466,14 +466,10 @@ Wallet rule (`txassembler.cpp`): if chain tip at send time `>= 839` → emit RIN
 
 ---
 
-### 📸 Proof of Simulation (Screenshot)
-![Validation Results at Block 6300](doc/assets/simulation-bva-results.png)
+### 📸 Proof of Simulation (Screenshot & Log)
+Full simulation artifacts (Monte Carlo, BVA, MWEB lifecycle and reorg) are archived on Zenodo and citable by DOI.
 
-![MWEB Validation Results](doc/assets/simulation-mimble-wimble-results.png)
-
-![MWEB Reorg Validation Results](doc/assets/simulation-mweb-reorg-results.png)
-
-![CH × RIN3 & Attack Resilience Results](doc/assets/simulation-rin3-results.png)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20363269-blue)](https://doi.org/10.5281/zenodo.20363269)
 
 ---
 
