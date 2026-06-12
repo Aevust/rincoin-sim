@@ -102,12 +102,21 @@ Validates Peg-in, Peg-out (with wallet isolation), and Chain Reorganization (Reo
 ```
 
 ### Combined CH × RIN3 & Attack Resilience Simulation
-The most comprehensive single-run suite. In one regtest session it validates the full emission schedule (BVA), RIN3 wallet/consensus nVersion enforcement at the fork boundary, and subsidy determinism under four escalating reorg-attack scenarios (max depth: 2,101 blocks across two economic phases).
+The primary regression suite (broadest coverage). In one regtest session it validates the full emission schedule (BVA), RIN3 wallet nVersion enforcement at the fork boundary, and subsidy determinism under four escalating reorg-attack scenarios (max depth: 2,101 blocks across two economic phases). For the deepest attack proof (full CH-history erasure), see `sim-ch-attack.sh` below.
 ```bash
 ./scripts/sim-ch-rin3.sh
 ```
 > Companion negative consensus test (node-level rejection of legacy-nVersion
 > blocks at height ≥ fork): `test/functional/feature_rin3_enforcement.py`
+
+### Deep-Reorg Attack Proof (Omega Edition)
+The dedicated, heavyweight, attack proof. It runs the full phase advance and BVA, then **five** escalating reorg scenarios — culminating in a 5,461-block **full CH-history erasure** (Omega: invalidate block 840 from the Terminal phase at h=6,300, then re-mine every phase boundary from scratch). This proves `GetBlockSubsidy` is a pure function of height even when the *entire* Customized Halving history is wiped.
+```bash
+./scripts/sim-ch-attack.sh
+```
+> Runtime: ~15–20 min (vs ~5 min for `sim-ch-rin3.sh`). Use this for release-grade
+> attack evidence; use `sim-ch-rin3.sh` for routine regression. This script does
+> **not** include the RIN3 wallet tests — those live in `sim-ch-rin3.sh` (Section 3).
 
 ---
 
