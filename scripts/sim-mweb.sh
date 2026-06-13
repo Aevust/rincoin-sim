@@ -14,9 +14,32 @@ elif [ -f "./src/rincoind" ]; then
     RINCOINCLI="./src/rincoin-cli"
 else
     echo "Error: rincoind not found."
-    echo "Run from rincoin-sim-v1.0.6.1-linux-x86_64/ or source dir."
+    echo "Run from rincoin-sim-v1.0.7-linux-x86_64/ or source dir."
     exit 1
 fi
+
+# ---------- Helper: report a wallet tx's confirmation state ----------
+# gettransaction emits JSON as  "confirmations": N  (note the space after
+# the colon), so the extraction pattern must tolerate whitespace. A naive
+# '"confirmations":[0-9-]*' matches zero digits and silently returns just
+# the key, which is why the reorg section previously printed a blank value.
+#
+# Interpretation:
+#   >=1  mined (confirmed in a block)
+#    0   accepted but unconfirmed (back in mempool after the reorg)
+#   <0   conflicted (Bitcoin/Litecoin marks reorged-out txs negative)
+#  none  not in the wallet at all (dropped)
+tx_status() {
+    local txid=$1 json n
+    json=$($RINCOINCLI -regtest -rpcwallet=mweb_wallet gettransaction "$txid" 2>/dev/null) \
+        || { echo "dropped (not in wallet)"; return; }
+    n=$(printf '%s' "$json" | grep -oP '"confirmations":\s*\K-?[0-9]+' | head -1)
+    if   [ -z "$n" ];    then echo "unknown (parse failed)"
+    elif [ "$n" -lt 0 ]; then echo "$n confirmations (conflicted / reorged out)"
+    elif [ "$n" -eq 0 ]; then echo "0 confirmations (in mempool, unconfirmed)"
+    else                      echo "$n confirmation(s) (mined)"
+    fi
+}
 
 # ---------- Cleanup trap ----------
 # Runs on EXIT (normal finish, error, or Ctrl-C).
@@ -127,9 +150,8 @@ sleep 1
 NEW_HEIGHT=$($RINCOINCLI -regtest -rpcwallet=miner_wallet getblockcount)
 echo "  After invalidate: height=$NEW_HEIGHT (expect $((CURRENT_HEIGHT-1)))"
 
-CONF=$($RINCOINCLI -regtest -rpcwallet=mweb_wallet gettransaction $PEGOUT_TXID 2>/dev/null \
-  | grep -o '"confirmations":[0-9-]*' || echo '"confirmations":orphaned')
-echo "  Transaction status : $CONF (expect 0 or orphaned)"
+echo "  Peg-out tx after invalidate : $(tx_status "$PEGOUT_TXID")"
+echo "                                (expect: 0/mempool or conflicted)"
 
 echo "  -> Generating a dummy transaction to ensure a unique block hash..."
 DUMMY_ADDR=$($RINCOINCLI -regtest -rpcwallet=miner_wallet getnewaddress "dummy")
@@ -141,9 +163,8 @@ $RINCOINCLI -regtest -rpcwallet=miner_wallet generatetoaddress 1 $MINER_ADDR > /
 FINAL_HEIGHT=$($RINCOINCLI -regtest -rpcwallet=miner_wallet getblockcount)
 echo "  After re-mine: height=$FINAL_HEIGHT (expect $CURRENT_HEIGHT)"
 
-CONF2=$($RINCOINCLI -regtest -rpcwallet=mweb_wallet gettransaction $PEGOUT_TXID 2>/dev/null \
-  | grep -o '"confirmations":[0-9]*' || echo '"confirmations":rebroadcast_needed')
-echo "  Transaction status : $CONF2"
+echo "  Peg-out tx after re-mine    : $(tx_status "$PEGOUT_TXID")"
+echo "                                (expect: 1 confirmation)"
 
 echo ""
 echo "===== Simulation Complete ====="
