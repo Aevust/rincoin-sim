@@ -26,7 +26,7 @@ Sensitive information may be encrypted using the public keys listed above.
 From the repository (requires a local clone):
 
 ```
-gpg --import security/Aevust_0x8B6E3BF45C714ECA_public.asc
+gpg --import security/aevust.asc
 ```
 
 Or from the public keyserver (no clone required):
