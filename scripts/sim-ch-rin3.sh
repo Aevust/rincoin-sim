@@ -400,8 +400,8 @@ echo "  Each scenario leaves the chain at TARGET, ready for the next."
 echo ""
 echo "  Scenario depths:"
 echo "    [A] Minimal Attack      840 ->  839 ->  840  (   1 block)"
-echo "    [B] Super Attack       2100 ->  839 -> 2100  (1261 blocks, Phase 4 erasure)"
-echo "    [C] Cross-Phase Attack 4200 -> 2099 -> 4200  (2101 blocks, Phase 5 erasure)"
+echo "    [B] Super Attack       2100 ->  839 -> 2100  (1261 blocks, Phase 4 full erasure)"
+echo "    [C] Cross-Phase Attack 4200 -> 2099 -> 4200  (2101 blocks, Phase 5 full erasure)"
 echo "    [D] Terminal Attack    6300 -> 4199 -> 6300  (2101 blocks, Phase 6 + Terminal erasure)"
 
 # [A] 840 -> 839 -> 840

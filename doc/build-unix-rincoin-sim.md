@@ -1,6 +1,6 @@
 # Rincoin-Sim Build & Test Procedure
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20363269.svg)](https://doi.org/10.5281/zenodo.20363269)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20363269-blue)](https://doi.org/10.5281/zenodo.20363269)
 **Environment**: Ubuntu 24.04 LTS (VirtualBox)
 **Target**: rincoin-sim v1.0.7 — 1/1000 scale functional test environment
 **Verified**: 2026-05-23
@@ -109,7 +109,8 @@ configure: creating ./config.status
 # Build with all CPU cores, save log
 make -j$(nproc) 2>&1 | tee build_$(date +%m%d).log
 
-# Run unit tests (optional — Qt GUI tests will fail without a display, which is expected)
+# Run unit tests (test_rincoin Boost suite + libsecp256k1).
+# No Qt test is built under --without-gui, so a display is not required.
 make check 2>&1 | tee test_$(date +%m%d).log
 ```
 
@@ -124,7 +125,7 @@ These portability warnings are harmless. The build succeeds.
 
 ### make check note
 
-`qt/test/test_rincoin-qt` fails without a display (X11/Wayland). This is expected in a headless VirtualBox environment and does not affect functional tests.
+`test_rincoin` (Boost) and `exhaustive_tests` (libsecp256k1) are the only test targets built under `--without-gui`. No display is required.
 
 ### Built binaries
 
@@ -355,7 +356,6 @@ Tests successful
 | `mweb-missing` | MWEB data required but not built | Add `-vbparams=mweb:9999999999:9999999999` |
 | `venv` creation fails | `python3.12-venv` not installed | `sudo apt install python3.12-venv` |
 | `blake3` install fails | Rust not installed | Install Rust first (Step 1) |
-| `make check` FAIL (Qt test) | No display in headless VirtualBox | Expected — does not affect functional tests |
 | `Text file busy` during `strip` | rincoind is running | `pkill -9 rincoind` first |
 | `git pull` blocked with `modified:` warnings | Local edits conflict with remote | `git restore <file>` to discard local changes |
 
@@ -503,7 +503,7 @@ sha256sum src/rincoind src/rincoin-cli src/rincoin-tx src/rincoin-wallet >> SHA2
 cat SHA256SUMS.txt
 ```
 
-### 10-2. Transfer to signing machine
+### 10-2. Transfer to the signing machine
 
 Move the following two files to the host OS (Windows or wherever your GPG key lives):
 
@@ -512,7 +512,7 @@ Move the following two files to the host OS (Windows or wherever your GPG key li
 
 Transfer via VirtualBox shared folder, SCP, or WinSCP.
 
-### 10-3. GPG clear-sign on signing machine
+### 10-3. GPG clear-sign on the signing machine
 
 Clear-sign keeps the SHA256 values human-readable while attaching a verifiable signature.
 
@@ -521,7 +521,7 @@ Clear-sign keeps the SHA256 values human-readable while attaching a verifiable s
 gpg --clear-sign SHA256SUMS.txt
 ```
 
-**Linux (if signing on same machine):**
+**Linux (if signing on the same machine):**
 ```bash
 gpg --clear-sign SHA256SUMS.txt
 ```
@@ -553,7 +553,7 @@ Upload exactly **3 files**:
 # 1. Download all three files
 
 # 2. Verify the GPG signature on the checksums
-gpg --verify SHA256SUMS.txt.asc SHA256SUMS.txt
+gpg --verify SHA256SUMS.txt.asc
 # Expected: "Good signature from <signer email>"
 
 # 3. Verify the tarball matches the checksum
@@ -583,7 +583,7 @@ Defined in `src/rinhash.cpp`. The Python equivalent in `messages.py`:
 |---------|----------------|
 | Mainnet | `NEVER_ACTIVE`|
 | Testnet | `nStartHeight = 840` (height-based) |
-| Regtest | `nStartTime = 1601450001` (time-based, already past → activates ~h=288) |
+| Regtest | `nStartTime = 1601450001` (time-based, already past → activates ~h=432) |
 
 For tests that do not cover MWEB behaviour, disable with:
 
