@@ -402,7 +402,7 @@ echo "  Scenario depths:"
 echo "    [A] Minimal Attack      840 ->  839 ->  840  (   1 block)"
 echo "    [B] Super Attack       2100 ->  839 -> 2100  (1261 blocks, Phase 4 erasure)"
 echo "    [C] Cross-Phase Attack 4200 -> 2099 -> 4200  (2101 blocks, Phase 5 erasure)"
-echo "    [D] Terminal Attack    6300 -> 4199 -> 6300  (2101 blocks, Phase 6 erasure)"
+echo "    [D] Terminal Attack    6300 -> 4199 -> 6300  (2101 blocks, Phase 6 + Terminal erasure)"
 
 # [A] 840 -> 839 -> 840
 #   From h=840: invalidate(840) -> h=839 (6.25 RIN)
