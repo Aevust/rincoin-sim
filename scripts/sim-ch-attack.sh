@@ -16,7 +16,7 @@
 #     [A] Minimal       840 ->  839 ->  840      1 block   (most realistic)
 #     [B] Super        2100 ->  839 -> 2100   1261 blocks  (Phase 4 erasure)
 #     [C] Cross-Phase  4200 -> 2099 -> 4200   2101 blocks  (Phase 5 erasure)
-#     [D-1] Terminal   6300 -> 4199 -> 6300   2101 blocks  (Phase 6 erasure)
+#     [D-1] Terminal   6300 -> 4199 -> 6300   2101 blocks  (Phase 6 + Terminal erasure)
 #     [D-2] Omega      6300 ->  839 -> 6300   5461 blocks  (full CH erasure)
 #
 # Companion scripts (faster, routine use):
@@ -44,16 +44,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ---------- Binary detection ----------
-if [ -f "./bin/rincoind" ]; then
-    RINCOIND="./bin/rincoind"
-    RINCOINCLI="./bin/rincoin-cli"
-elif [ -f "./src/rincoind" ]; then
-    RINCOIND="./src/rincoind"
-    RINCOINCLI="./src/rincoin-cli"
+# ---------- Binary detection (CWD-independent) ----------
+# Resolve binaries relative to this script's own location so the
+# harness can be invoked from any working directory.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PKG_ROOT="$(dirname "$SCRIPT_DIR")"
+if [ -f "$PKG_ROOT/bin/rincoind" ]; then
+    RINCOIND="$PKG_ROOT/bin/rincoind"
+    RINCOINCLI="$PKG_ROOT/bin/rincoin-cli"
+elif [ -f "$PKG_ROOT/src/rincoind" ]; then
+    RINCOIND="$PKG_ROOT/src/rincoind"
+    RINCOINCLI="$PKG_ROOT/src/rincoin-cli"
 else
-    echo "Error: rincoind not found."
-    echo "Run from rincoin-sim-v1.0.6.1-linux-x86_64/ or source dir."
+    echo "Error: rincoind not found under $PKG_ROOT/bin/ or $PKG_ROOT/src/."
+    echo "If running from a source tree, build it first (doc/build-unix-rincoin-sim.md)."
     exit 1
 fi
 
@@ -322,7 +326,7 @@ echo "  Scenario map:"
 echo "    [A] Minimal       840 ->  839 ->  840      1 block"
 echo "    [B] Super        2100 ->  839 -> 2100   1261 blocks"
 echo "    [C] Cross-Phase  4200 -> 2099 -> 4200   2101 blocks"
-echo "    [D-1] Terminal   6300 -> 4199 -> 6300   2101 blocks"
+echo "    [D-1] Terminal   6300 -> 4199 -> 6300   2101 blocks  (Phase 6 + Terminal erasure)"
 echo "    [D-2] Omega      6300 ->  839 -> 6300   5461 blocks  <- full CH erasure"
 
 # [A] 840 -> 839 -> 840
@@ -346,7 +350,7 @@ attack_scenario \
 # [D-1] 6300 -> 4199 -> 6300
 #   Phase 6 + Terminal erasure (4200-6300 wiped).
 attack_scenario \
-    "[D-1] Terminal: 6300 -> 4199 -> 6300  (Phase 6 erasure, 2101 blocks)" \
+    "[D-1] Terminal: 6300 -> 4199 -> 6300  (Phase 6 + Terminal erasure, 2101 blocks)" \
     6300 4200 200000000 6300 60000000
 
 # [D-2] 6300 -> 839 -> 6300

@@ -36,16 +36,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ---------- Binary detection ----------
-if [ -f "./bin/rincoind" ]; then
-    RINCOIND="./bin/rincoind"
-    RINCOINCLI="./bin/rincoin-cli"
-elif [ -f "./src/rincoind" ]; then
-    RINCOIND="./src/rincoind"
-    RINCOINCLI="./src/rincoin-cli"
+# ---------- Binary detection (CWD-independent) ----------
+# Resolve binaries relative to this script's own location so the
+# harness can be invoked from any working directory.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PKG_ROOT="$(dirname "$SCRIPT_DIR")"
+if [ -f "$PKG_ROOT/bin/rincoind" ]; then
+    RINCOIND="$PKG_ROOT/bin/rincoind"
+    RINCOINCLI="$PKG_ROOT/bin/rincoin-cli"
+elif [ -f "$PKG_ROOT/src/rincoind" ]; then
+    RINCOIND="$PKG_ROOT/src/rincoind"
+    RINCOINCLI="$PKG_ROOT/src/rincoin-cli"
 else
-    echo "Error: rincoind not found."
-    echo "Run from rincoin-sim-v1.0.6.1-linux-x86_64/ or source dir."
+    echo "Error: rincoind not found under $PKG_ROOT/bin/ or $PKG_ROOT/src/."
+    echo "If running from a source tree, build it first (doc/build-unix-rincoin-sim.md)."
     exit 1
 fi
 
