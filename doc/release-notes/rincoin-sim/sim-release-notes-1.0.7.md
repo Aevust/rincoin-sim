@@ -174,6 +174,8 @@ New in v1.0.7:
 - `sim-ch-attack.sh` — Deep-Reorg Attack Proof (Omega Edition): five escalating reorg scenarios up to 5,461-block full CH-history erasure
 - `test/functional/feature_rin3_enforcement.py` — consensus-level rejection of legacy-nVersion blocks at height ≥ fork
 
+All four shell harnesses resolve `rincoind` relative to the script's own location (`BASH_SOURCE`) and can be run from any working directory.
+
 ---
 
 ## Known issues
@@ -188,7 +190,7 @@ The MWEB BDB → SQLite migration remains pending upstream Litecoin work. MWEB r
 
 | Platform | SHA256 |
 | -------- | ------ |
-| Linux (x86_64) | `cc0c708e38779333a54424fcfbf5c1900a8ea79fb3ad32288918eacf78a17eec` |
+| Linux (x86_64) | `ae3b0a73eaeb9e02d684afdf1513e0b1ad0a54035454bfee3189bdc239305538` |
 
 SHA256 verification:
 ```bash
