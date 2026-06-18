@@ -498,7 +498,11 @@ Bitcoin Core-level release security (supply chain attack defense).
 sha256sum rincoin-sim-v1.0.7-linux-x86_64.tar.gz > SHA256SUMS.txt
 
 # Optionally include per-binary checksums for transparency
-sha256sum src/rincoind src/rincoin-cli src/rincoin-tx src/rincoin-wallet >> SHA256SUMS.txt
+# (run while the package directory still exists, before cleanup)
+sha256sum ${PKG}/bin/rincoind \
+          ${PKG}/bin/rincoin-cli \
+          ${PKG}/bin/rincoin-tx \
+          ${PKG}/bin/rincoin-wallet >> SHA256SUMS.txt
 
 cat SHA256SUMS.txt
 ```
