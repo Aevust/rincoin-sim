@@ -6,6 +6,7 @@
 #include <wallet/wallet.h>
 
 #include <chain.h>
+#include <chainparams.h>    // RIP-0011: Params(), CBaseChainParams::MAIN
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
 #include <fs.h>
@@ -20,6 +21,7 @@
 #include <primitives/transaction.h>
 #include <script/descriptor.h>
 #include <script/script.h>
+#include <script/standard.h>  // RIP-0011: Solver(), TxoutType
 #include <script/signingprovider.h>
 #include <txmempool.h>
 #include <util/bip32.h>
@@ -3152,6 +3154,28 @@ bool CWallet::CreateTransaction(
         FeeCalculation& fee_calc_out,
         bool sign)
 {
+    // RIP-0011: reject sends to witness v1 (Taproot) or future witness
+    // versions on mainnet. Taproot is NEVER_ACTIVE on Rincoin mainnet;
+    // such outputs are anyone-can-spend at the consensus level.
+    // MWEB peg-in/HogAddr are unaffected: Solver() returns dedicated
+    // WITNESS_MWEB_* types before the WITNESS_UNKNOWN fallback.
+    // FundTransaction (fundrawtransaction) reaches this guard via the
+    // CreateTransaction call at wallet.cpp:3118.
+    if (Params().NetworkIDString() == CBaseChainParams::MAIN) {
+        for (const CRecipient& recipient : vecSend) {
+            std::vector<std::vector<unsigned char>> solutions;
+            const TxoutType type = Solver(recipient.scriptPubKey, solutions);
+            if (type == TxoutType::WITNESS_V1_TAPROOT ||
+                    type == TxoutType::WITNESS_UNKNOWN) {
+                error = Untranslated(
+                    "Refusing to send to a Taproot or future witness-version "
+                    "address on mainnet: Taproot is not active on Rincoin "
+                    "(RIP-0011); the output would be spendable by anyone.");
+                return false;
+            }
+        }
+    }
+
     int nChangePosIn = nChangePosInOut;
 
     Optional<AssembledTx> tx1 = TxAssembler(*this).AssembleTx(vecSend, coin_control, nChangePosIn, sign, error);
