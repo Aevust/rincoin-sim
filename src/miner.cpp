@@ -242,7 +242,6 @@ bool BlockAssembler::TestPackageTransactions(const CTxMemPool::setEntries& packa
         if (failedTxs.count(it) > 0) {
             return false;
         }
-
         // Rincoin RIN3: belt-and-suspenders skip.
         // Mempool should block these at entry, but guard CreateNewBlock
         // from throwing if a legacy-nVersion tx somehow enters mempool.
@@ -253,7 +252,6 @@ bool BlockAssembler::TestPackageTransactions(const CTxMemPool::setEntries& packa
                 return false;
             }
         }
-
     }
     return true;
 }
