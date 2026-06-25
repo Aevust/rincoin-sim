@@ -245,6 +245,7 @@ BASE_SCRIPTS = [
     'wallet_scriptaddress2.py',
     'feature_dersig.py',
     'feature_cltv.py',
+    'feature_rin3_enforcement.py',
     'mweb_basic.py',
     'mweb_mining.py',
     'mweb_reorg.py',
