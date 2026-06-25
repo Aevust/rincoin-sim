@@ -177,7 +177,7 @@ def ser_fixed_bytes(u, size):
         #rs += struct.pack("B", u & 0xFF)
         #u >>= 8
     return rs
-    
+
 
 def deser_pubkey(f):
     r = 0
@@ -192,7 +192,7 @@ def ser_pubkey(u):
         rs += struct.pack("B", u & 0xFF)
         u >>= 8
     return rs
-    
+
 
 def deser_signature(f):
     r = 0
@@ -207,7 +207,7 @@ def ser_signature(u):
         rs += struct.pack("B", u & 0xFF)
         u >>= 8
     return rs
-        
+
 
 
 # deser_function_name: Allow for an alternate deserialization function on the
@@ -648,7 +648,7 @@ class CTransaction:
         r += struct.pack("<I", self.nLockTime)
         return r
 
-    
+
     # Only serialize with mweb when explicitly called for
     def serialize_with_mweb(self):
         flags = 0
@@ -826,7 +826,7 @@ class CBlock(CBlockHeader):
             r += ser_vector(self.vtx, "serialize_with_witness")
         else:
             r += ser_vector(self.vtx, "serialize_without_witness")
-        
+
         return r
 
     # Calculate the merkle root given a vector of transaction hashes
@@ -943,10 +943,10 @@ class P2PHeaderAndShortIDs:
             self.shortids.append(struct.unpack("<Q", f.read(6) + b'\x00\x00')[0])
         self.prefilled_txn = deser_vector(f, PrefilledTransaction)
         self.prefilled_txn_length = len(self.prefilled_txn)
-        
+
         if len(self.prefilled_txn) > 0 and self.prefilled_txn[-1].tx.hogex:
             self.mweb_block = deser_mweb_block(f)
-                
+
     # When using version 2 compact blocks, we must serialize with_witness.
     # When using version 3 compact blocks, we must serialize with_mweb.
     def serialize(self, version=1):
@@ -1434,7 +1434,7 @@ class msg_no_witness_block(msg_block):
     __slots__ = ()
     def serialize(self):
         return self.block.serialize(with_witness=False, with_mweb=False)
-    
+
 class msg_no_mweb_block(msg_block):
     __slots__ = ()
     def serialize(self):
@@ -1954,7 +1954,7 @@ class Hash:
 
     def __init__(self, val = 0):
         self.val = val
-        
+
     @classmethod
     def from_hex(cls, hex_str):
         return cls(int(hex_str, 16))
@@ -1962,11 +1962,11 @@ class Hash:
     @classmethod
     def from_rev_hex(cls, hex_str):
         return cls(int(hex_reverse(hex_str), 16))
-        
+
     @classmethod
     def from_byte_arr(cls, b):
         return cls(deser_uint256(BytesIO(b)))
-    
+
     def to_hex(self):
         return self.serialize().hex()
 
@@ -2012,7 +2012,7 @@ def ser_varint(n):
 
 def deser_varint(f):
     n = 0;
-    while True: 
+    while True:
         chData = struct.unpack("B", f.read(1))[0]
         n = (n << 7) | (chData & 0x7F)
         if chData & 0x80:
@@ -2050,7 +2050,7 @@ def deser_mweb_tx(f):
         return mweb_tx.deserialize(f)
     else:
         return None
-        
+
 
 class MWEBInput:
     __slots__ = ("features", "output_id", "commitment", "input_pubkey",
@@ -2092,7 +2092,7 @@ class MWEBInput:
             r += ser_fixed_bytes(self.extradata, len(self.extradata))
         r += ser_signature(self.signature)
         return r
-    
+
     def rehash(self):
         self.hash = blake3(self.serialize())
         return self.hash.to_hex()
@@ -2134,7 +2134,7 @@ class MWEBOutputMessage:
             r += ser_compact_size(len(self.extradata))
             r += ser_fixed_bytes(self.extradata, len(self.extradata))
         return r
-    
+
     def rehash(self):
         self.hash = blake3(self.serialize())
         return self.hash.to_hex()
@@ -2170,7 +2170,7 @@ class MWEBOutput:
         r += ser_fixed_bytes(self.proof, 675)
         r += ser_signature(self.signature)
         return r
-    
+
     def rehash(self):
         self.hash = blake3(self.serialize())
         return self.hash.to_hex()
@@ -2269,7 +2269,7 @@ class MWEBKernel:
         r += ser_pubkey(self.excess)
         r += ser_signature(self.signature)
         return r
-    
+
     def rehash(self):
         self.hash = blake3(self.serialize())
         return self.hash.to_hex()
@@ -2322,7 +2322,7 @@ class MWEBTransaction:
         r += self.stealth_offset.serialize()
         r += self.body.serialize()
         return r
-    
+
     def rehash(self):
         self.hash = blake3(self.serialize())
         return self.hash.to_hex()
@@ -2378,7 +2378,7 @@ class MWEBHeader:
         r += ser_varint(self.num_txos)
         r += ser_varint(self.num_kernels)
         return r
-    
+
     def rehash(self):
         self.hash = blake3(self.serialize())
         return self.hash.to_hex()
@@ -2407,7 +2407,7 @@ class MWEBBlock:
         r += self.header.serialize()
         r += self.body.serialize()
         return r
-    
+
     def rehash(self):
         return self.header.rehash()
 
