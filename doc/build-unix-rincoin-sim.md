@@ -411,6 +411,22 @@ make -j$(nproc)
 
 For distributing `rincoin-sim` to other testers/developers via GitHub Releases.
 
+> **Automated path (recommended).** `contrib/release/Makefile` runs the whole
+> flow — build, package, source tarball, and detached GPG signing — in one step,
+> from a clean, tagged tree:
+>
+> ```bash
+> cd contrib/release
+> make release                        # depends build + dist + sign
+> ```
+>
+> `make linux` builds via the upstream `depends` system (the standard; it also
+> builds its own BDB 4.8, so no `install_db4.sh` is needed). `make native-linux`
+> reproduces the manual native build in §2–§4 (system libraries + a local BDB via
+> `install_db4.sh`). Both emit the v-less, Core-style artifact name (see §9-3).
+> The steps below are the manual equivalent of what `make release` automates; see
+> also `contrib/release/README.md`.
+
 ### 9-1. Stop the daemon
 
 `strip` cannot modify a running binary (Linux's `Text file busy` protection).
@@ -434,7 +450,7 @@ strip src/rincoind src/rincoin-cli src/rincoin-tx src/rincoin-wallet
 Standard package layout (v1.0.7 includes additional CH attack/RIN3 simulation scripts):
 
 ```
-rincoin-sim-v1.0.7-linux-x86_64/
+rincoin-sim-1.0.7-x86_64-linux-gnu/
 ├── bin/
 │   ├── rincoind
 │   ├── rincoin-cli
@@ -449,8 +465,8 @@ rincoin-sim-v1.0.7-linux-x86_64/
 ```
 
 ```bash
-VER="v1.0.7"
-PKG="rincoin-sim-${VER}-linux-x86_64"
+VER="1.0.7"                                   # bare version - the leading "v" lives only on the git tag
+PKG="rincoin-sim-${VER}-x86_64-linux-gnu"     # GNU host triple (matches Rincoin Core; avoids colliding with the source tarball)
 
 mkdir -p ${PKG}/bin ${PKG}/scripts
 
@@ -474,6 +490,11 @@ cp README.md ${PKG}/
 tar -czvf ${PKG}.tar.gz ${PKG}
 ```
 
+This yields `rincoin-sim-1.0.7-x86_64-linux-gnu.tar.gz`. The binary keeps the GNU
+host triple so it never collides with the bare-version **source** tarball
+`rincoin-sim-1.0.7.tar.gz` (produced by `make dist` / `git archive`) - the same
+convention Rincoin Core uses.
+
 ### Why ship all four binaries
 
 | Binary | Why needed |
@@ -493,77 +514,80 @@ Bitcoin Core-level release security (supply chain attack defense).
 
 ### 10-1. Generate SHA256 checksums (Ubuntu)
 
+Hash the distributed **archives**. Archive-level checksums are the universal
+standard (Bitcoin Core, Litecoin); once you ship archives, per-binary hashes add
+no integrity benefit, so they are intentionally omitted.
+
 ```bash
-# Main tarball checksum
-sha256sum rincoin-sim-v1.0.7-linux-x86_64.tar.gz > SHA256SUMS.txt
-
-# Optionally include per-binary checksums for transparency
-# (run while the package directory still exists, before cleanup)
-sha256sum ${PKG}/bin/rincoind \
-          ${PKG}/bin/rincoin-cli \
-          ${PKG}/bin/rincoin-tx \
-          ${PKG}/bin/rincoin-wallet >> SHA256SUMS.txt
-
-cat SHA256SUMS.txt
+sha256sum rincoin-sim-1.0.7-x86_64-linux-gnu.tar.gz > SHA256SUMS
+# If you also publish the source tarball (`make dist`):
+sha256sum rincoin-sim-1.0.7.tar.gz >> SHA256SUMS
+cat SHA256SUMS
 ```
+
+`make sign` does exactly this - it re-hashes every `rincoin-sim-*.tar.gz` present
+- so after `make release` you can skip straight to §10-5.
 
 ### 10-2. Transfer to the signing machine
 
-Move the following two files to the host OS (Windows or wherever your GPG key lives):
+A detached signature is made over `SHA256SUMS`, so that file is all the
+signing machine strictly needs. Bring the archive(s) too if the signer will
+re-verify them:
 
-1. `rincoin-sim-v1.0.7-linux-x86_64.tar.gz`
-2. `SHA256SUMS.txt`
+1. `SHA256SUMS`
+2. `rincoin-sim-1.0.7-x86_64-linux-gnu.tar.gz` (and `rincoin-sim-1.0.7.tar.gz`, if built)
 
 Transfer via VirtualBox shared folder, SCP, or WinSCP.
 
-### 10-3. GPG clear-sign on the signing machine
+### 10-3. GPG detached-sign on the signing machine
 
-Clear-sign keeps the SHA256 values human-readable while attaching a verifiable signature.
+Produce a **detached, armored** signature over `SHA256SUMS`. This matches
+Bitcoin Core / Litecoin practice and avoids the clear-sign pitfall noted below.
 
-**Windows PowerShell:**
-```powershell
-gpg --clear-sign SHA256SUMS.txt
-```
-
-**Linux (if signing on the same machine):**
+**Linux / Windows PowerShell - same command:**
 ```bash
-gpg --clear-sign SHA256SUMS.txt
+gpg --local-user <FINGERPRINT> --detach-sign --armor \
+    --output SHA256SUMS.asc SHA256SUMS
 ```
 
-Output: `SHA256SUMS.txt.asc` — contains both the readable hashes and a `-----BEGIN PGP SIGNATURE-----` block.
+Output: `SHA256SUMS.asc` - a standalone `-----BEGIN PGP SIGNATURE-----` block
+that sits **next to** the plain, human-readable `SHA256SUMS`, which is
+published unchanged. `make sign` does this for you.
 
-### 10-4. Why clear-sign
+> **Why not `--clear-sign`?** Clear-sign folds the hashes and the signature into
+> one file. If that file is named `SHA256SUMS.asc` while the plain
+> `SHA256SUMS` is also present, `gpg --verify SHA256SUMS.asc` applies its
+> *detached*-signature heuristic (treating the `.asc` as a detached sig for the
+> same-stem file) and prints confusing warnings. Detached-armored avoids this and
+> is what Rincoin Core and the v1.0.6 release use.
 
-| Format | Pros |
-|--------|------|
-| `--clear-sign` (`.asc`) | Hashes visible to humans + verifiable signature in one file |
-| `--detach-sign` (`.sig`) | Smaller signature file, but requires separate hash file |
+### 10-4. GitHub Releases asset structure
 
-Clear-sign is recommended for user-friendliness.
-
-### 10-5. GitHub Releases asset structure
-
-Upload exactly **3 files**:
+Upload the archive(s) plus the two manifest files:
 
 | File | Role |
 |------|------|
-| `rincoin-sim-v1.0.7-linux-x86_64.tar.gz` | Binary package |
-| `SHA256SUMS.txt` | Plain-text checksums |
-| `SHA256SUMS.txt.asc` | GPG-signed checksums (clear-sign format) |
+| `rincoin-sim-1.0.7-x86_64-linux-gnu.tar.gz` | Binary package |
+| `rincoin-sim-1.0.7.tar.gz` | Source tarball (`make dist`; optional but recommended) |
+| `SHA256SUMS` | Plain-text checksums (published unchanged) |
+| `SHA256SUMS.asc` | Detached, armored GPG signature over `SHA256SUMS` |
 
-### 10-6. User-side verification flow
+### 10-5. User-side verification flow
 
 ```bash
-# 1. Download all three files
+# 1. Download the archive(s) + SHA256SUMS + SHA256SUMS.asc
 
-# 2. Verify the GPG signature on the checksums
-gpg --verify SHA256SUMS.txt.asc
-# Expected: "Good signature from <signer email>"
+# 2. Verify the signature. A DETACHED signature names BOTH the signature
+#    file and the signed file:
+gpg --verify SHA256SUMS.asc SHA256SUMS
+# Expected: "Good signature from <signer>"
 
-# 3. Verify the tarball matches the checksum
-sha256sum -c SHA256SUMS.txt
+# 3. Verify the archives match the checksums
+sha256sum -c SHA256SUMS --ignore-missing
 # Expected: rincoin-sim-...tar.gz: OK
 ```
+
+`make verify` runs the equivalent signature + checksum check for you.
 
 ---
 
@@ -605,5 +629,6 @@ MWEB + RIN3 interaction is covered by `feature_rin3_mweb_exemption.py` (separate
 | GUI | `--without-gui` | `--with-gui=qt5` |
 | BDB | `BDB_LIBS / BDB_CFLAGS` (strict) | Same |
 | Optimization | `Strip` recommended | `strip` mandatory |
-| Signing | Optional | Mandatory (GPG clear-sign) |
-| Distribution | Tarball + scripts/ | Tarball, multi-platform |
+| Signing | Detached-armored over `SHA256SUMS` (optional, single signer) | Detached-armored (mandatory) |
+| Build | `make native-linux` (system libs) or `make linux` (depends) | `make linux` (depends), multi-platform |
+| Distribution | Binary + source tarball + `scripts/` | Tarball, multi-platform |
