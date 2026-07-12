@@ -609,11 +609,23 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
     // user txs and MWEBOnly reach here. MWEBOnly is exempt (same as
     // ContextualCheckBlock). At next-block height >= nRinHashForkHeight,
     // legacy-nVersion txs can never be mined — block them at entry.
+    //
+    // Classified TX_RECENT_CONSENSUS_CHANGE, not TX_CONSENSUS. RIN3 is a
+    // consensus rule newer than SegWit, which is precisely what that enum
+    // value is reserved for. MaybePunishNodeForTx scores TX_CONSENSUS at
+    // 100 — instant discouragement — while TX_RECENT_CONSENSUS_CHANGE
+    // carries no score. A peer relaying a pre-fork legacy tx across the
+    // boundary (an honest node with mempool residue, or a non-upgraded
+    // node following our chain) must not be disconnected for it; with
+    // 60-second blocks the recentRejects filter re-arms every tip change,
+    // so the punishment would recur rather than fire once. The tx is
+    // still rejected and never mined — only the DoS score differs.
+    // ContextualCheckBlock retains BLOCK_CONSENSUS. See RIP-0009 §3.
     if (!tx.IsMWEBOnly()) {
         const int next_height = ::ChainActive().Tip()->nHeight + 1;
         if (next_height >= args.m_chainparams.GetConsensus().nRinHashForkHeight
             && tx.nVersion != CTransaction::RIN_FORK_TX_VERSION) {
-            return state.Invalid(TxValidationResult::TX_CONSENSUS,
+            return state.Invalid(TxValidationResult::TX_RECENT_CONSENSUS_CHANGE,
                                   "bad-tx-rinhash-version");
         }
     }
