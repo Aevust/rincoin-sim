@@ -6,7 +6,7 @@
 #include <wallet/wallet.h>
 
 #include <chain.h>
-#include <chainparams.h>    // RIP-0011: Params(), CBaseChainParams::MAIN
+#include <chainparams.h>    // RIP-0011: Params(), Consensus::BIP9Deployment
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
 #include <fs.h>
@@ -699,7 +699,7 @@ bool CWallet::EncryptWallet(const SecureString& strWalletPassphrase)
 
         // MWEB: No need to replace HD seed, which would complicate MWEB key management.
         // So for now, we don't generate a new seed.
-        // 
+        //
         // If we are using descriptors, make new descriptors with a new seed
         //if (IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS) && !IsWalletFlagSet(WALLET_FLAG_BLANK_WALLET)) {
         //    SetupDescriptorScriptPubKeyMans();
@@ -1670,7 +1670,7 @@ CAmount CWallet::GetDebit(const CTransaction& tx, const boost::optional<MWEB::Wa
         if (!MoneyRange(nDebit))
             throw std::runtime_error(std::string(__func__) + ": value out of range");
     }
-    
+
     return nDebit;
 }
 
@@ -1748,7 +1748,7 @@ CAmount CWallet::GetChange(const CTransaction& tx, const boost::optional<MWEB::W
             nChange += pegout.GetAmount();
             if (!MoneyRange(nChange))
                 throw std::runtime_error(std::string(__func__) + ": value out of range");
-        
+
         }
     }
 
@@ -3154,23 +3154,32 @@ bool CWallet::CreateTransaction(
         FeeCalculation& fee_calc_out,
         bool sign)
 {
-    // RIP-0011: reject sends to witness v1 (Taproot) or future witness
-    // versions on mainnet. Taproot is NEVER_ACTIVE on Rincoin mainnet;
-    // such outputs are anyone-can-spend at the consensus level.
-    // MWEB peg-in/HogAddr are unaffected: Solver() returns dedicated
-    // WITNESS_MWEB_* types before the WITNESS_UNKNOWN fallback.
-    // FundTransaction (fundrawtransaction) reaches this guard via the
-    // CreateTransaction call at wallet.cpp:3118.
-    if (Params().NetworkIDString() == CBaseChainParams::MAIN) {
+    // RIP-0011: refuse to create outputs paying to witness v1 (Taproot) or any
+    // later witness version while that deployment is sealed. Such outputs are
+    // anyone-can-spend at the consensus level. This is reachable from
+    // sendtoaddress, not only from the raw transaction APIs: DecodeDestination
+    // accepts genuine bech32m v1 addresses (key_io.cpp:112-144) and maps them to
+    // WitnessUnknown, which GetScriptForDestination renders as OP_1 <program>.
+    //
+    // The deployment parameter is read directly rather than querying activation
+    // state: VersionBitsState requires cs_main, and cs_wallet is already held
+    // here (lock-order reversal).
+    const Consensus::Params& consensus = Params().GetConsensus();
+    if (consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime
+            == Consensus::BIP9Deployment::NEVER_ACTIVE) {
         for (const CRecipient& recipient : vecSend) {
+            // StealthAddress recipients carry no script: GetScript() asserts on
+            // !IsMWEB() (script/address.cpp:25). Script-bearing MWEB constructs
+            // are classified as WITNESS_MWEB_PEGIN / _HOGADDR before the
+            // WITNESS_UNKNOWN fallback (script/standard.cpp:141,145).
+            if (recipient.IsMWEB()) continue;
+
             std::vector<std::vector<unsigned char>> solutions;
-            const TxoutType type = Solver(recipient.scriptPubKey, solutions);
-            if (type == TxoutType::WITNESS_V1_TAPROOT ||
-                    type == TxoutType::WITNESS_UNKNOWN) {
-                error = Untranslated(
-                    "Refusing to send to a Taproot or future witness-version "
-                    "address on mainnet: Taproot is not active on Rincoin "
-                    "(RIP-0011); the output would be spendable by anyone.");
+            const TxoutType type = Solver(recipient.receiver.GetScript(), solutions);
+            if (type == TxoutType::WITNESS_V1_TAPROOT || type == TxoutType::WITNESS_UNKNOWN) {
+                error = _("Cannot create an output paying to witness version 1 or "
+                          "later: this deployment is never activated on this "
+                          "network and such outputs are anyone-can-spend.");
                 return false;
             }
         }
