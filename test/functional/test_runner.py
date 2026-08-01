@@ -287,6 +287,7 @@ BASE_SCRIPTS = [
     'rpc_scantxoutset.py',
     'feature_logging.py',
     'p2p_node_network_limited.py',
+    'p2p_rin3_services.py',
     'p2p_permissions.py',
     'feature_blocksdir.py',
     'wallet_startup.py',
