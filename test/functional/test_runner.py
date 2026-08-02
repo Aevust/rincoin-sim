@@ -246,6 +246,7 @@ BASE_SCRIPTS = [
     'feature_dersig.py',
     'feature_cltv.py',
     'feature_rin3_enforcement.py',
+    'feature_taproot_wallet_guard.py',
     'mweb_basic.py',
     'mweb_mining.py',
     'mweb_reorg.py',
