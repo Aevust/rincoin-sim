@@ -44,9 +44,11 @@ Subtests:
                      on !IsMWEB() (script/address.cpp:25), so a guard that
                      drops its IsMWEB() early-continue would abort the node
                      rather than fail an RPC. This subtest is the permanent
-                     regression guard for that failure mode -- its decisive
-                     assertion is that the node is still answering RPCs
-                     afterwards.
+                     regression guard for that failure mode. An abort would
+                     surface first as a transport-level failure of the send
+                     itself, since the node dies mid-request; the
+                     getblockcount that follows confirms the node is still
+                     serving.
 """
 
 from test_framework.test_framework import BitcoinTestFramework
@@ -168,7 +170,10 @@ class TaprootWalletGuardTest(BitcoinTestFramework):
         self.log.info(f"  witness v1 address = {taproot_addr}")
         # Still decodable: the seal changes consensus deployment state, not
         # address parsing. This keeps the refusal attributable to the guard.
-        assert node.validateaddress(taproot_addr)["isvalid"]
+        assert node.validateaddress(taproot_addr)["isvalid"], (
+            "the sealed node no longer decodes the bech32m v1 address, so a "
+            "refusal below would not be attributable to the guard"
+        )
 
         assert_raises_rpc_error(GUARD_ERROR_CODE, GUARD_ERROR_FRAGMENT,
                                 node.sendtoaddress, taproot_addr, 1)
@@ -187,28 +192,45 @@ class TaprootWalletGuardTest(BitcoinTestFramework):
         try:
             mweb_addr = node.getnewaddress("", "mweb")
         except JSONRPCException as e:
-            self.log.info(f"  MWEB address unavailable: {e.error['message']}")
-            self.log.info("  [SKIP] cannot construct an MWEB recipient here")
-            return
+            # Not a skippable condition. MWEB has an address type on every
+            # network in this tree, so failing to produce one means this
+            # subtest -- the only runtime check that the guard does not
+            # abort the node -- did not run at all. Returning quietly here
+            # would leave run_test() printing ALL SUBTESTS PASSED for a
+            # guard that was never exercised.
+            raise AssertionError(
+                "could not create an MWEB address, so [03] never ran: "
+                f"{e.error['message']}"
+            ) from e
 
         self.log.info(f"  MWEB address = {mweb_addr}")
+        # The send has to reach CreateTransaction for this subtest to mean
+        # anything, because the IsMWEB() continue lives there. sendtoaddress
+        # returns a txid for an MWEB recipient even before MWEB activates:
+        # the transaction is built and recorded, it just does not enter the
+        # mempool. So a failure here is not an acceptable variation, it means
+        # the guard was never reached and this subtest proved nothing. The
+        # send therefore has to succeed, and this test now enforces that.
         try:
             txid = node.sendtoaddress(mweb_addr, 1)
-            self.log.info(f"  sendtoaddress txid = {txid}")
         except JSONRPCException as e:
             message = e.error["message"]
-            self.log.info(f"  send failed: {message}")
-            # Failing because MWEB is not active on this chain is acceptable;
-            # failing with the guard's message is not -- that would mean the
-            # guard classified a scriptless recipient.
-            assert GUARD_ERROR_FRAGMENT not in message, (
-                f"guard rejected an MWEB recipient: {message}"
-            )
+            if GUARD_ERROR_FRAGMENT in message:
+                raise AssertionError(
+                    f"guard rejected an MWEB recipient: {message}"
+                ) from e
+            raise AssertionError(
+                "the MWEB send failed before reaching the guard, so [03] "
+                f"exercised nothing: {message}"
+            ) from e
+        self.log.info(f"  sendtoaddress txid = {txid}")
 
-        # Decisive assertion. If the guard had called GetScript() on a
+        # Confirmation. If the guard had called GetScript() on a
         # StealthAddress, the assert at script/address.cpp:25 would have
-        # aborted the node and this RPC would fail at the transport layer
-        # rather than returning.
+        # aborted the node -- which would already have broken the send
+        # above at the transport layer, since the node dies mid-request
+        # and never returns a JSON error. This call proves the node is
+        # still serving afterwards.
         assert_equal(node.getblockcount(), height_before)
         self.log.info("  [PASS] node still answering RPCs; no assert reached")
 
