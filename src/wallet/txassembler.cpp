@@ -247,7 +247,7 @@ void TxAssembler::VerifyRecipients(const std::vector<CRecipient>& recipients)
             throw CreateTxError(_("Only one MWEB recipient supported at this time"));
         }
 
-        
+
         nValue += recipient.nAmount;
         if (nValue < 0 || recipient.nAmount < 0) {
             throw CreateTxError(_("Transaction amounts must not be negative"));

@@ -124,10 +124,12 @@ MESSAGEMAP = {
 }
 
 MAGIC_BYTES = {
-    "mainnet": b"\xfb\xc0\xb6\xdb",   # mainnet
-    "testnet4": b"\xfd\xd2\xc8\xf1",  # testnet4
-    "regtest": b"\xfa\xbf\xb5\xda",   # regtest
-    "signet": b"\x0a\x03\xcf\x40",    # signet
+    "mainnet": b"\x52\x49\x4e\x43",   # "RINC" -- chainparams.cpp:148-151
+    "testnet4": b"\x72\x69\x6e\x74",  # "rint" -- chainparams.cpp:371-374
+    "regtest": b"\x72\x72\x63\x74",   # "rrct" -- chainparams.cpp:464-467
+    # No signet: this tree does not support it -- CreateChainParams() falls back
+    # to testnet params (chainparams.cpp:590). Absent on purpose, so that a
+    # lookup fails loudly if signet is ever added without updating this table.
 }
 
 
@@ -330,7 +332,7 @@ class P2PInterface(P2PConnection):
         self.nServices = 0
 
         self.support_addrv2 = support_addrv2
-        
+
     def peer_connect_send_version(self, services):
         # Send a version msg
         vt = msg_version()
@@ -487,7 +489,7 @@ class P2PInterface(P2PConnection):
 
     def wait_for_mwebheader(self, blockhash, timeout=60):
         """Waits for an mwebheader message
-        
+
         The hash of the block header must match the provided blockhash"""
         def test_function():
             last_mwebheader = self.last_message.get('mwebheader')
@@ -499,7 +501,7 @@ class P2PInterface(P2PConnection):
 
     def wait_for_mwebleafset(self, blockhash, timeout=60):
         """Waits for an mwebleafset message
-        
+
         The hash of the block header must match the provided blockhash"""
         def test_function():
             last_mwebleafset = self.last_message.get('mwebleafset')
