@@ -23,6 +23,7 @@
 # rincoin-sim-<VERSION>.tar.gz — exactly why Core puts the triple on binaries and
 # the bare version on the source archive.
 #   release :  VERSION = 1.1.0     TAG = v1.1.0      bin rincoin-sim-1.1.0-x86_64-linux-gnu.tar.gz
+#   patch   :  VERSION = 1.1.0.1   TAG = v1.1.0.1    bin rincoin-sim-1.1.0.1-x86_64-linux-gnu.tar.gz
 #   candidate: VERSION = 1.1.0rc1  TAG = v1.1.0-rc1  bin rincoin-sim-1.1.0rc1-x86_64-linux-gnu.tar.gz
 #
 # BDB 4.8: the `depends` tree builds its own libdb_cxx-4.8.a (Core's verify
@@ -42,7 +43,7 @@
 # Toggles (make VAR=value target):
 #   GUI=1             build the Qt GUI (equivalent to the -full target name)
 #   JOBS=8            parallel jobs inside the build (default: nproc)
-#   VERSION=1.1.0     file version, no "v" (default: parsed from configure.ac)
+#   VERSION=1.1.0.1   file version, no "v" (default: parsed from configure.ac)
 #   TAG=v1.1.0        git tag / git-archive ref (default from configure.ac)
 #   KEY=<fpr>         GPG signing key (default: the maintainer key below)
 #   HOST=<triple>     depends host for `make linux` (default x86_64-linux-gnu;
@@ -63,16 +64,23 @@ ROOT  := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
 
 JOBS  ?= $(shell nproc 2>/dev/null || echo 4)
 
-# Version from configure.ac (RIP-0001: MAJOR.MINOR.REVISION + RC).
+# Version from configure.ac (MAJOR.MINOR.REVISION[.BUILD][rcRC]).
+# BUILD is the sim-internal patch field: Core keeps it at 0, so it is omitted
+# when zero, exactly as AC_INIT does with m4_if(_CLIENT_VERSION_BUILD, [0], []).
+# Parsing it here is not cosmetic. BASE feeds TAG, TAG feeds DIST_REF, and
+# DIST_REF is the ref `make dist` hands to git archive: with BUILD unparsed, a
+# 1.1.0.1 tree would package the v1.1.0 source under a 1.1.0 name while the
+# binaries report 1.1.0.1, with no error anywhere.
 # Paren-free greps: a literal ')' inside $(shell ...) would close the make
 # function early, so we avoid awk field classes / sed capture groups.
 V_MAJ := $(shell grep -o '_CLIENT_VERSION_MAJOR, *[0-9][0-9]*' "$(ROOT)/configure.ac" | grep -o '[0-9][0-9]*')
 V_MIN := $(shell grep -o '_CLIENT_VERSION_MINOR, *[0-9][0-9]*' "$(ROOT)/configure.ac" | grep -o '[0-9][0-9]*')
 V_REV := $(shell grep -o '_CLIENT_VERSION_REVISION, *[0-9][0-9]*' "$(ROOT)/configure.ac" | grep -o '[0-9][0-9]*')
+V_BLD := $(shell grep -o '_CLIENT_VERSION_BUILD, *[0-9][0-9]*' "$(ROOT)/configure.ac" | grep -o '[0-9][0-9]*')
 V_RC  := $(shell grep -o '_CLIENT_VERSION_RC, *[0-9][0-9]*' "$(ROOT)/configure.ac" | grep -o '[0-9][0-9]*')
 
 # "v" on the git tag only; files carry the bare version (Core convention).
-BASE    := $(V_MAJ).$(V_MIN).$(V_REV)
+BASE    := $(V_MAJ).$(V_MIN).$(V_REV)$(if $(filter-out 0,$(V_BLD)),.$(V_BLD),)
 VERSION ?= $(BASE)$(if $(filter-out 0,$(V_RC)),rc$(V_RC),)
 TAG     ?= v$(BASE)$(if $(filter-out 0,$(V_RC)),-rc$(V_RC),)
 
