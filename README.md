@@ -1,30 +1,31 @@
 # Rincoin-Sim: Customized Halving & MWEB Simulation Environment
 
-![Version](https://img.shields.io/badge/version-1.0.7--sim-red.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-REGTEST_ONLY-critical.svg)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20363269-blue)](https://doi.org/10.5281/zenodo.20363269)
 
 > ⚠️ **CRITICAL WARNING: REGTEST ONLY / DO NOT MERGE TO MAINNET** ⚠️
-> 
+>
 > This repository (`rincoin-sim`) is a dedicated simulation environment strictly designed for local `regtest` execution. It tests the **Customized Halving (Scenario II)** mechanism at a highly accelerated pace and validates the **MWEB full lifecycle (Peg-in, Peg-out, and Reorg)**.
-> 
-> **Built-in Killswitches:** Hardcoded exceptions in `src/chainparams.cpp` intentionally prevent both Mainnet and Testnet daemons from initializing. 
+>
+> **Built-in Killswitch:** A daemon-level guard in `src/bitcoind.cpp` refuses every chain except regtest. Mainnet, testnet and signet all fail at startup with an error naming the chain. (`src/chainparams.cpp` carries only a pointer comment to it.)
+> **Startup self-check:** every start also asserts that the Customized Halving fork height equals four times the halving interval, on all three networks -- the daemon constructs them all at startup -- so a mis-scaled build aborts before it runs.
 > **This is a critical safety measure to prevent accidental misuse. Since this repository uses 1/1000 scaled parameters, any attempt to connect to public networks would result in immediate consensus rejection by standard nodes.**
 
-### 🌐 Network Availability in Simulation
+### Network Availability in Simulation
 
 | Network | Status | Command |
 | :--- | :--- | :--- |
 | **regtest** | ✅ **Allowed** | `./bin/rincoind -regtest -daemon` |
-| **testnet** | ❌ Disabled | Error & exit |
-| **mainnet** | ❌ Disabled | Error & exit |
+| **testnet** | ❌ Refused | Error & exit |
+| **mainnet** | ❌ Refused | Error & exit |
+| **signet** | ❌ Refused | Error & exit (`-signet` / `-chain=signet`) |
 
-*Reason: `rincoin-sim` uses 1/1000 scaled block parameters strictly incompatible with public Testnet/Mainnet consensus rules. Both are physically disabled at the code level.*
+*Reason: `rincoin-sim` uses 1/1000 scaled block parameters strictly incompatible with public network consensus rules. The daemon refuses every chain except regtest. The built-in `-help` text still lists all four chains under `-chain=`; that text is inherited, and the daemon's refusal is what governs.*
 
 ---
 
-## 🔬 Purpose of this Repository
+## Purpose of this Repository
 
 This repository serves a dual purpose for validating Rincoin's core upgrades prior to mainnet deployment:
 
@@ -47,7 +48,7 @@ Beyond economics and privacy, this environment validates that the **RIN3 transac
 
 ---
 
-## 📊 Scaled Emission Schedule (Simulation: 1/1000)
+## Scaled Emission Schedule (Simulation: 1/1000)
 
 The following table outlines the accelerated timeline for Boundary Value Analysis (BVA) validation via `regtest` RPC commands:
 
@@ -62,7 +63,7 @@ The following table outlines the accelerated timeline for Boundary Value Analysi
 | **Phase 6** | 4,200 - 6,299 | 4,200,000 - 6,299,999 | 1 | 2,100 |
 | **Terminal**| 6,300+ | 6,300,000+ | 0.6 | Perpetual |
 
-### 🧪 Simulation Scale (rincoin-sim)
+### Simulation Scale (rincoin-sim)
 
 | Milestone | Mainnet | This Repo (1/1000) |
 | :--- | :--- | :--- |
@@ -74,7 +75,7 @@ The following table outlines the accelerated timeline for Boundary Value Analysi
 
 ---
 
-## ⚙️ Core Architecture (Inherited)
+## Core Architecture (Inherited)
 
 While the emission schedule is accelerated for testing, the underlying architecture remains identical to Rincoin Core:
 - **Proof-of-Work (PoW):** RinHash algorithm (BLAKE3 -> Argon2d -> SHA3-256).
@@ -83,7 +84,7 @@ While the emission schedule is accelerated for testing, the underlying architect
 
 ---
 
-## 🚀 Automated Simulation Scripts (Recommended)
+## Automated Simulation Scripts (Recommended)
 
 If you have cloned this repository, the fastest way to validate is via the automated scripts in `scripts/`. They handle daemon initialization, wallet creation, block generation, and result output automatically.
 
@@ -120,21 +121,21 @@ The dedicated, heavyweight, attack proof. It runs the full phase advance and BVA
 
 ---
 
-## 🔭 How to run the Simulation
+## How to run the Simulation
 
 Download the latest release tarball and extract it to your preferred
 directory. The binaries are self-contained and require no external
 dependencies.
 
 ```bash
-# 1. Extract the release tarball
-tar -xzf rincoin-sim-v1.0.7-linux-x86_64.tar.gz
+# 1. Extract the release tarball (the file name carries the version and platform)
+tar -xzf rincoin-sim-<version>-x86_64-linux-gnu.tar.gz
 
-# 2. Navigate to the project root directory
-cd rincoin-sim-v1.0.7-linux-x86_64/
+# 2. Navigate to the extracted directory
+cd rincoin-sim-<version>-x86_64-linux-gnu/
 ```
 
-> 💡 **Automated scripts** (`./scripts/sim-ch.sh`, `./scripts/sim-mweb.sh`) must be
+> **Automated scripts** (`./scripts/sim-ch.sh`, `./scripts/sim-mweb.sh`) must be
 > run from this root directory. **Manual commands** below require navigating into `bin/`:
 
 ```bash
@@ -142,8 +143,8 @@ cd rincoin-sim-v1.0.7-linux-x86_64/
 cd bin/
 ```
 
-> 💡 All manual commands below assume you are inside the
-> `rincoin-sim-v1.0.7-linux-x86_64/bin/` directory.
+> All manual commands below assume you are inside the
+> `rincoin-sim-<version>-x86_64-linux-gnu/bin/` directory.
 
 Launch the simulator daemon in regtest mode:
 
@@ -194,7 +195,7 @@ echo "-----------------------------------"
 
 ---
 
-### ⚡ Quick Validation (One-Shot Script)
+### Quick Validation (One-Shot Script)
 
 ```bash
 # ===== Customized Halving Full Simulation (One-shot) =====
@@ -256,9 +257,9 @@ echo "===== Simulation Complete ====="
 
 ---
 
-## ✅ Validation Results
+## Validation Results
 
-Boundary Value Analysis (BVA) confirms that the Customized Halving (Scenario II) executes correctly at 1/1000 scaled block heights.
+Boundary Value Analysis (BVA) confirms that the Customized Halving executes correctly at 1/1000 scaled block heights.
 
 | Block (sim) | Block (mainnet) | Subsidy (satoshi) | RIN | Result |
 | :--- | :--- | :--- | :--- | :--- |
@@ -271,218 +272,39 @@ Boundary Value Analysis (BVA) confirms that the Customized Halving (Scenario II)
 | 6,299 | 6,299,000 | 100,000,000 | 1.00 | ✅ PASS |
 | **6,300** | **6,300,000** | **60,000,000** | **0.60** | ✅ **Terminal** |
 
-> *Test Date: 2026-04-20*  
-> *Environment: regtest (1/1000 scale)*  
-> *Network: rincoin-sim (mainnet & testnet disabled)*
+Beyond the table above, the archived evidence covers, per release:
+
+- **MWEB full lifecycle** -- activation, peg-in, peg-out, and reorg
+  resilience across the MWEB activation boundary (`scripts/sim-mweb.sh`)
+- **RIN3 nVersion enforcement** -- boundary behaviour at the fork height,
+  mempool defense, and P2P service signaling
+  (`scripts/sim-ch-rin3.sh`, `test/functional/feature_rin3_enforcement.py`,
+  `test/functional/p2p_rin3_services.py`)
+- **Deep-reorg attack resilience** -- reorgs of up to 2,101 blocks that
+  erase entire economic phases and remine them, with deterministic
+  subsidy recovery (`scripts/sim-ch-attack.sh`)
+- **Taproot wallet guard** -- witness v1+ refusal at the wallet layer
+  while MWEB stays functional
+  (`test/functional/feature_taproot_wallet_guard.py`)
+
+Full logs are not quoted here. They are archived on Zenodo, citable by
+DOI, and reproducible from this tree: every result above comes from a
+script or functional test that ships in this repository, and each
+release's evidence bundle carries the logs together with a signed
+digest list (`SHA256SUMS` + `SHA256SUMS.asc`). Start with `MANIFEST.md`
+in the bundle; it states what the bundle establishes and what it does
+not.
+
+- All versions (concept DOI, resolves to the latest release's bundle):
+  [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20363269-blue)](https://doi.org/10.5281/zenodo.20363269)
+- v1.1.0 release evidence (functional suite, simulation logs, signed
+  digest list): [10.5281/zenodo.21805345](https://doi.org/10.5281/zenodo.21805345)
+- v1.0.7 simulation artifacts (Monte Carlo, BVA, MWEB lifecycle and
+  reorg): [10.5281/zenodo.20745260](https://doi.org/10.5281/zenodo.20745260)
 
 ---
 
-## 🛡️ MWEB (MimbleWimble Extension Block) Simulation
-
-This repository includes critical consensus fixes for the initial HogEx transaction, enabling MWEB to activate safely on Rincoin. The full lifecycle — Peg-in, Peg-out, and Reorg resilience — has been validated under accelerated regtest conditions.
-
-### Reproducible MWEB Test Script
-
-Stop the daemon and reset the regtest environment:
-```bash
-./rincoin-cli -regtest stop
-rm -rf ~/.rincoin/regtest
-./rincoind -regtest -daemon
-sleep 3
-```
-
-Copy and paste the entire block below:
-
-```bash
-# 1. Create test wallet
-./rincoin-cli -regtest createwallet "mweb_test"
-
-# 2. Generate addresses
-# Note: Mining rewards must go to transparent address (rrin1...)
-# MWEB address (rrmweb1...) is for receiving via sendtoaddress only
-MINER_ADDR=$(./rincoin-cli -regtest getnewaddress "miner")
-MWEB_ADDR=$(./rincoin-cli -regtest getnewaddress "mweb_receiver" "mweb")
-echo "Miner (Transparent): $MINER_ADDR"
-echo "Receiver (MWEB)    : $MWEB_ADDR"
-
-# 3. Mine 450 blocks to transparent address
-# (MWEB activates at ~block 432 in regtest)
-./rincoin-cli -regtest generatetoaddress 450 $MINER_ADDR > /dev/null
-
-# 4. Peg-in: Send 10 RIN from transparent chain to MWEB
-./rincoin-cli -regtest sendtoaddress $MWEB_ADDR 10 > /dev/null
-
-# 5. Mine 1 block to confirm
-./rincoin-cli -regtest generatetoaddress 1 $MINER_ADDR > /dev/null
-
-# 6. Verify MWEB balance
-./rincoin-cli -regtest listaddressgroupings
-```
-
----
-
-### ⚡ MWEB Peg-In Quick Validation (One-Shot Script)
-For rapid end-to-end verification, paste the entire block below into your terminal. This script validates Peg-in activation only. For full lifecycle validation (Peg-in, Peg-out, and Reorg), use `./scripts/sim-mweb.sh`.
-
-```bash
-# ===== MWEB Full Simulation (One-shot) =====
-
-# 0. Reset environment
-./rincoin-cli -regtest stop 2>/dev/null
-sleep 1
-rm -rf ~/.rincoin/regtest
-./rincoind -regtest -daemon
-sleep 3
-
-# 1. Create wallet and addresses
-./rincoin-cli -regtest createwallet "mweb_test" > /dev/null
-MINER_ADDR=$(./rincoin-cli -regtest getnewaddress "miner")
-MWEB_ADDR=$(./rincoin-cli -regtest getnewaddress "mweb_receiver" "mweb")
-echo "Miner (Transparent): $MINER_ADDR"
-echo "MWEB  (Private)    : $MWEB_ADDR"
-echo ""
-
-# 2. Mine blocks
-echo "[1/3] Mining 450 blocks (MWEB activates at ~block 432)..."
-./rincoin-cli -regtest generatetoaddress 450 $MINER_ADDR > /dev/null
-
-# 3. Peg-in
-echo "[2/3] Peg-in: Sending 10 RIN to MWEB address..."
-./rincoin-cli -regtest sendtoaddress $MWEB_ADDR 10 > /dev/null
-
-# 4. Confirm
-echo "[3/3] Mining 1 block to confirm Peg-in..."
-./rincoin-cli -regtest generatetoaddress 1 $MINER_ADDR > /dev/null
-
-echo ""
-echo "===== MWEB Validation Results ====="
-./rincoin-cli -regtest listaddressgroupings
-echo ""
-echo "===== Simulation Complete ====="
-echo "Expected: rrmweb1... address holding 10.00000000 RIN"
-```
-
----
-
-## ✅ Expected Result
-
-```bash
-===== MWEB Validation Results =====
-[
-  [
-    [
-      "rrin1q8twvefee3rpvk2yj...",
-      13975.00000000,
-      "miner"
-    ]
-  ],
-  [
-    [
-      "rrmweb1qq0mdeg9msd2hqm...",
-      14.99963500
-    ]
-  ],
-  [
-    [
-      "rrmweb1qqfd6u6nk4pvyu9...",
-      10.00000000,
-      "mweb_receiver"
-    ]
-  ]
-]
-
-===== Simulation Complete =====
-Expected: rrmweb1... address holding 10.00000000 RIN
-```
-
-### ✅ MWEB Full Lifecycle Results (sim-mweb.sh)
-
-```text
-===== Peg-out Results =====
-Transparent 2 received : 5.00000000 RIN (expect ~5.0)
-MWEB remaining         : 4.99991600 RIN (expect ~4.999)
-
-[6/6] Reorg Test: Invalidating Peg-out block...
-  After invalidate: height=451 (expect 451)
-  Transaction status : "confirmations": (expect 0 or orphaned)
-  -> Generating a dummy transaction to ensure a unique block hash...
-  Re-mining replacement block...
-  After re-mine: height=452 (expect 452)
-
-===== Simulation Complete =====
-Validated: Transparent → MWEB (Peg-in) → Transparent (Peg-out) + Reorg
-```
-
-> *Test Date: 2026-04-25*  
-> *Environment: regtest (1/1000 scale)*  
-> *Network: rincoin-sim (mainnet & testnet disabled)*
-
----
-
-### Understanding the Output
-The presence of two MWEB addresses is the intended behavior and cryptographically proves that the privacy features are fully functional:
-* `mweb_receiver`: Holds the exact `10.00000000 RIN` explicitly sent via the Peg-in transaction.
-* **Unlabeled MWEB Address (`14.999... RIN`)**: This is an automatically generated **Change Address**. Following the standard UTXO model, the remaining balance from the Peg-in transaction (minus network fees) is routed to this newly generated, hidden MWEB address to maximize transaction privacy.
-* `miner`: The remaining transparent balance from the initial block generation.
-
-**Conclusion:** The MWEB integration, including Peg-in, Peg-out, automated change obfuscation, and Reorg resilience, is operating flawlessly.
-
-> ⚠️ Note: `generatetoaddress` only accepts transparent addresses (`rrin1...`).  
-> MWEB addresses (`rrmweb1...`) receive funds via `sendtoaddress` only.  
-> This is expected behavior, identical to Litecoin MWEB specification.
-
----
-
-## 🔐 CH × RIN3 & Attack Resilience Simulation
-
-`./scripts/sim-ch-rin3.sh` is the consolidated validation entry point. It runs four sequential sections in a single regtest session:
-
-| Section | Scope | Coverage |
-| :--- | :--- | :--- |
-| **1. Phase Advance** | Mine blocks 1 → 6,400 | All 8 phase boundaries materialized |
-| **2. BVA** | Boundary Value Analysis | Subsidy correctness at 839/840, 2099/2100, 4199/4200, 6299/6300 |
-| **3. RIN3 Wallet Tests** | nVersion enforcement | Wallet emits `0x52494e33` at/above fork, legacy below |
-| **4. Attack Simulation** | Reorg determinism | 4 escalating rollback scenarios (max depth 2,101 blocks) |
-
-### RIN3 nVersion Enforcement (Section 3)
-
-`nRinHashForkHeight` (regtest) = **840**. RIN3 marker = `0x52494e33` = `1380535859`.
-Wallet rule (`txassembler.cpp`): if chain tip at send time `>= 839` → emit RIN3; else legacy nVersion.
-
-| Scenario | Chain Tip at Send | Wallet nVersion | Mined / Enforced At | Result |
-| :--- | :--- | :--- | :--- | :--- |
-| **[RIN3-1]** Above fork | h > 840 | `0x52494e33` (RIN3) | h > 840 (enforced) | ✅ PASS |
-| **[RIN3-2]** Boundary edge | tip = 839 (839 ≥ 839) | `0x52494e33` (RIN3) | h = 840 (enforced) | ✅ PASS |
-| **[RIN3-3]** Below boundary | tip = 838 (838 < 839) | `2` (legacy) | h = 839 (not yet enforced) | ✅ PASS |
-
-### Attack Simulation (Section 4)
-
-**Thesis:** `GetBlockSubsidy` is a pure function of block height. No matter how deep the reorg, the correct subsidy is restored on re-mine.
-
-| # | Scenario | Reorg Path | Depth | Rolled-back → Restored | Result |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **[A]** | Minimal | 840 → 839 → 840 | 1 block | 6.25 → 4.00 RIN | ✅ PASS |
-| **[B]** | Super | 2,100 → 839 → 2,100 | 1,261 blocks | 6.25 → 2.00 RIN (Phase 4 erased) | ✅ PASS |
-| **[C]** | Cross-Phase | 4,200 → 2,099 → 4,200 | 2,101 blocks | 4.00 → 1.00 RIN (Phase 5 erased) | ✅ PASS |
-| **[D]** | Terminal | 6,300 → 4,199 → 6,300 | 2,101 blocks | 2.00 → 0.60 RIN (Phase 6 + Terminal erased) | ✅ PASS |
-
-> *Max reorg depth: 2,101 blocks across 2 economic phases.*  
-> *Companion negative consensus test: `test/functional/feature_rin3_enforcement.py`*
-
-> *Test Date: 2026-05-17*  
-> *Environment: regtest (1/1000 scale)*  
-> *Network: rincoin-sim (mainnet & testnet disabled)*
-
----
-
-### 📸 Proof of Simulation (Screenshot & Log)
-Full simulation artifacts (Monte Carlo, BVA, MWEB lifecycle and reorg) are archived on Zenodo and citable by DOI.
-
-[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20363269-blue)](https://doi.org/10.5281/zenodo.20363269)
-
----
-
-## 💬 Community
+## Community
 
 Join the official Rincoin community to stay updated, get support, and discuss development:
 
