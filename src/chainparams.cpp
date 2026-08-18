@@ -96,6 +96,11 @@ public:
         strNetworkID = CBaseChainParams::MAIN;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
+        // Scales the entire emission schedule. GetBlockSubsidy() derives every
+        // Customized Halving phase boundary from this single value (RIP-0002):
+        // Phase 4 = 4x, Phase 5 = 10x, Phase 6 = 20x, Terminal = 30x.
+        // Therefore 4 * nSubsidyHalvingInterval is the Customized Halving
+        // hard-fork height, and MUST equal nRinHashForkHeight (RIP-0009).
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP16Height = 26500; // 87afb798a3ad9378fcd56123c81fb31cfd9a8df4719b9774d71730c16315a092 - October 1, 2012
         consensus.BIP34Height = 26500;
@@ -159,6 +164,9 @@ public:
         consensus.hashGenesisBlock = genesis.GetHash();
         assert(consensus.hashGenesisBlock == uint256S("0x000096bdd6e4613ca89b074ebd6f609aba6fe3f868b34ee79380aa3bc7a8c9db"));
         assert(genesis.hashMerkleRoot == uint256S("0x8590c08530d2ed422b726a938f07df8f380671569e04dcb556dcb9601c47cdad"));
+
+        // RIP-0002 / RIP-0009: the CH fork height is 4x the halving interval.
+        assert(consensus.nRinHashForkHeight == 4 * consensus.nSubsidyHalvingInterval);
 
 
         // Note that of those which support the service bits prefix, most only support a subset of
@@ -333,6 +341,7 @@ public:
         strNetworkID = CBaseChainParams::TESTNET;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
+        // 1/1000 scale; 4x = 840 must match nRinHashForkHeight. See CMainParams.
         consensus.nSubsidyHalvingInterval = 210;
         consensus.BIP16Height = 0; // always enforce P2SH BIP16 on testnet
         consensus.BIP34Height = 76;
@@ -382,6 +391,9 @@ public:
         assert(consensus.hashGenesisBlock == uint256S("0x00009d5fbc8579e8b4292f1bab22437d9468c0cc615cb5b0242d8159b31760ad"));
         assert(genesis.hashMerkleRoot == uint256S("0x7a2a292324679fdd5b843a9daf72acc7b2801ab95321e863e545f69ced707b0e"));
 
+        // RIP-0002 / RIP-0009: the CH fork height is 4x the halving interval.
+        assert(consensus.nRinHashForkHeight == 4 * consensus.nSubsidyHalvingInterval);
+
         vFixedSeeds.clear();
         vSeeds.clear();
         // nodes with support for servicebits filtering should be at the top
@@ -426,6 +438,7 @@ public:
         strNetworkID =  CBaseChainParams::REGTEST;
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
+        // 1/1000 scale; 4x = 840 must match nRinHashForkHeight. See CMainParams.
         consensus.nSubsidyHalvingInterval = 210;
         consensus.BIP16Height = 0;
         consensus.BIP34Height = 500; // BIP34 activated on regtest (Used in functional tests)
@@ -476,6 +489,9 @@ public:
         consensus.hashGenesisBlock = genesis.GetHash();
         assert(consensus.hashGenesisBlock == uint256S("0x7d2c8c57ce2597f86c9fe41f9865ad664b04d2aad4321fdaab48ed3da1805fe7"));
         assert(genesis.hashMerkleRoot == uint256S("0xe3c12cbf8b33dc3a00cbe56699682fa6b2f7b03b981539dd079394df8315ff12"));
+
+        // RIP-0002 / RIP-0009: the CH fork height is 4x the halving interval.
+        assert(consensus.nRinHashForkHeight == 4 * consensus.nSubsidyHalvingInterval);
 
         vFixedSeeds.clear(); //!< Regtest mode doesn't have any fixed seeds.
         vSeeds.clear();      //!< Regtest mode doesn't have any DNS seeds.

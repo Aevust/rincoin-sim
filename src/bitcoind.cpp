@@ -78,25 +78,40 @@ static bool AppInit(int argc, char* argv[])
             return InitError(Untranslated(strprintf("Error reading configuration file: %s\n", error)));
         }
 
-        // rincoin-sim: Mainnet and Testnet are disabled at the daemon level.
-        // This build is configured for regtest simulation only.
-        // (bitcoin-cli/bitcoin-tx/bitcoin-wallet can still load MainParams
-        //  in offline read-only contexts; only the node daemon is restricted.)
-        const std::string& chain_name = args.GetChainName();
-        if (chain_name == CBaseChainParams::MAIN) {
-            return InitError(Untranslated(
-                "Mainnet is disabled in rincoin-sim. Use -regtest only.\n"));
-        }
-        if (chain_name == CBaseChainParams::TESTNET) {
-            return InitError(Untranslated(
-                "Testnet is disabled in rincoin-sim. This repo uses 1/1000 "
-                "scaled params incompatible with public Testnet consensus. "
-                "Use -regtest only.\n"));
-        }
-
         // Check for chain settings (Params() calls are only valid after this clause)
+        //
+        // rincoin-sim: only regtest is enabled at the daemon level. This
+        // tree carries 1/1000-scaled testnet and regtest parameters and
+        // must never join a public network.
+        //
+        // Scope: rincoind only. rincoin-cli, rincoin-tx and rincoin-wallet
+        // can still load MainParams in offline or RPC-client contexts,
+        // which carries no consensus risk. The GUI is not built here and
+        // src/qt/ carries no equivalent guard, so a GUI build of this tree
+        // would be unguarded.
+        //
+        // GetChainName() belongs inside this try. It throws when more than
+        // one chain flag is given, and an exception escaping to AppInit's
+        // outer handler falls through to Shutdown() with SelectParams()
+        // never having run, which aborts on the BaseParams() assert.
         try {
-            SelectParams(args.GetChainName());
+            const std::string& chain_name = args.GetChainName();
+            if (chain_name == CBaseChainParams::MAIN) {
+                return InitError(Untranslated(
+                    "Mainnet is disabled in rincoin-sim. Use -regtest only.\n"));
+            }
+            if (chain_name == CBaseChainParams::TESTNET) {
+                return InitError(Untranslated(
+                    "Testnet is disabled in rincoin-sim. This repo uses 1/1000 "
+                    "scaled params incompatible with public Testnet consensus. "
+                    "Use -regtest only.\n"));
+            }
+            if (chain_name != CBaseChainParams::REGTEST) {
+                return InitError(Untranslated(strprintf(
+                    "Chain \"%s\" is disabled in rincoin-sim. Use -regtest only.\n",
+                    chain_name)));
+            }
+            SelectParams(chain_name);
         } catch (const std::exception& e) {
             return InitError(Untranslated(strprintf("%s\n", e.what())));
         }
