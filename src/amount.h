@@ -23,8 +23,8 @@ static const CAmount COIN = 100000000;
  * critical; in unusual circumstances like a(nother) overflow bug that allowed
  * for the creation of coins out of thin air modification could lead to a fork.
  *
- * Rincoin: MAX_MONEY is set to 168,000,000 RIN — 8x the Bitcoin ceiling
- * referenced above, and 2x Litecoin's 84,000,000 — matching the hard cap
+ * Rincoin: MAX_MONEY is set to 168,000,000 RIN -- 8x the Bitcoin ceiling
+ * referenced above, and 2x Litecoin's 84,000,000 -- matching the hard cap
  * defined in the Rincoin whitepaper. Consistent with that note, this
  * value is a consensus-critical sanity bound on individual amounts, not a
  * running check on cumulative issued supply. Emission itself is governed by
