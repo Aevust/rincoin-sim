@@ -34,4 +34,12 @@ static const CAmount COIN = 100000000;
 static const CAmount MAX_MONEY = 168000000 * COIN;
 inline bool MoneyRange(const CAmount& nValue) { return (nValue >= 0 && nValue <= MAX_MONEY); }
 
+/** Rincoin supply cap, expressed per halving interval (RIP-0002).
+ *  800 RIN * 210,000 = 168,000,000 RIN on mainnet, where the derived
+ *  cap equals MAX_MONEY above. Scaled networks (interval = 210) derive
+ *  their cap the same way every other CH phase boundary is derived.
+ *  Accounting only: no consensus rule reads this constant yet.
+ */
+static constexpr CAmount SUPPLY_CAP_PER_INTERVAL = 800 * COIN;
+
 #endif //  BITCOIN_AMOUNT_H
