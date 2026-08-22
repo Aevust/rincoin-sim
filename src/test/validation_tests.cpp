@@ -92,4 +92,64 @@ BOOST_AUTO_TEST_CASE(subsidy_limit_test)
     BOOST_CHECK_EQUAL(nSum, CAmount{6084750000000000});
 }
 
+// Supply accounting (RIP-0002, Stage A). GetTotalSubsidy() is the closed
+// form of the running sum of GetBlockSubsidy(), clamped at the cap derived
+// from nSubsidyHalvingInterval. Accounting only: emission is unchanged.
+
+BOOST_AUTO_TEST_CASE(total_subsidy_sweep_test)
+{
+    // Regtest scales the schedule by 1/1000 (interval 210), so the whole
+    // emission curve including the cap fits in one sweep. At mainnet scale
+    // the same sweep would need 234,587,500 iterations.
+    const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::REGTEST);
+    const Consensus::Params& consensusParams = chainParams->GetConsensus();
+    const CAmount cap = GetSupplyCap(consensusParams);
+    BOOST_CHECK_EQUAL(cap, 168000 * COIN);
+
+    // One assertion for the whole sweep: report the first mismatching
+    // height rather than recording 240,001 individual checks.
+    int nFirstMismatch = -1;
+    CAmount nRunning = 0;
+    for (int nHeight = 0; nHeight <= 240000; ++nHeight) {
+        const CAmount nExpected = (nRunning < cap) ? nRunning : cap;
+        if (GetTotalSubsidy(nHeight, consensusParams) != nExpected) {
+            nFirstMismatch = nHeight;
+            break;
+        }
+        nRunning += GetBlockSubsidy(nHeight, consensusParams);
+    }
+    BOOST_CHECK_EQUAL(nFirstMismatch, -1);
+
+    // 12 does not divide 210, so the integral reaches the cap mid-block:
+    // the residual before height 234,587 is 0.3 RIN, i.e. a partial final
+    // block once the cap is enforced. Scaled networks only; mainnet
+    // (210,000 = 12 x 17,500) lands exactly on a block boundary.
+    BOOST_CHECK_EQUAL(GetTotalSubsidy(234587, consensusParams), cap - CAmount(30000000));
+    BOOST_CHECK_EQUAL(GetTotalSubsidy(234588, consensusParams), cap);
+}
+
+BOOST_AUTO_TEST_CASE(supply_cap_boundary_test)
+{
+    const auto chainParams = CreateChainParams(*m_node.args, CBaseChainParams::MAIN);
+    const Consensus::Params& consensusParams = chainParams->GetConsensus();
+    const CAmount cap = GetSupplyCap(consensusParams);
+    BOOST_CHECK_EQUAL(cap, MAX_MONEY);
+
+    BOOST_CHECK_EQUAL(GetTotalSubsidy(0, consensusParams), 0);
+    BOOST_CHECK_EQUAL(GetTotalSubsidy(1, consensusParams), 50 * COIN);
+
+    // Whitepaper v1.6.4 Sec.3 Scenario II: S_fix at the terminal phase start.
+    BOOST_CHECK_EQUAL(GetTotalSubsidy(6300000, consensusParams), CAmount(31027500) * COIN);
+
+    // Cap height = 13405 * interval / 12. int64 is mandatory here:
+    // 13405 * 210000 = 2,815,050,000 overflows int32.
+    // 234,587,500 / 525,600 = 446.3232 years = t_trans, "mining ends".
+    const int64_t nCapHeight = (int64_t)13405 * consensusParams.nSubsidyHalvingInterval / 12;
+    BOOST_CHECK_EQUAL(nCapHeight, 234587500);
+
+    BOOST_CHECK_EQUAL(GetTotalSubsidy((int)nCapHeight - 1, consensusParams), cap - CAmount(60000000));
+    BOOST_CHECK_EQUAL(GetTotalSubsidy((int)nCapHeight,     consensusParams), cap);
+    BOOST_CHECK_EQUAL(GetTotalSubsidy((int)nCapHeight + 1000000, consensusParams), cap);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

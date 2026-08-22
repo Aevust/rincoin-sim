@@ -168,6 +168,12 @@ public:
         // RIP-0002 / RIP-0009: the CH fork height is 4x the halving interval.
         assert(consensus.nRinHashForkHeight == 4 * consensus.nSubsidyHalvingInterval);
 
+        // Whitepaper v1.6.4 Sec.3 Scenario II: S_max = 168,000,000 RIN. The
+        // supply cap derived from the halving interval must equal the MAX_MONEY
+        // sanity bound in amount.h. Mainnet only: scaled networks intentionally
+        // derive a smaller cap (168,000 RIN at interval 210).
+        assert(SUPPLY_CAP_PER_INTERVAL * (int64_t)consensus.nSubsidyHalvingInterval == MAX_MONEY);
+
 
         // Note that of those which support the service bits prefix, most only support a subset of
         // possible options.

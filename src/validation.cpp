@@ -1324,6 +1324,49 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     return nSubsidy;
 }
 
+CAmount GetSupplyCap(const Consensus::Params& consensusParams)
+{
+    return SUPPLY_CAP_PER_INTERVAL * (int64_t)consensusParams.nSubsidyHalvingInterval;
+}
+
+/** Cumulative scheduled subsidy for blocks [0, nHeight), in satoshi,
+ *  clamped at the derived supply cap.
+ *
+ *  Closed form over the Customized Halving phase boundaries (RIP-0002):
+ *  no chainstate access, no CBlockIndex field, reorg-safe. Unit tests
+ *  pin this against a brute-force sum of GetBlockSubsidy() so the two
+ *  cannot drift apart.
+ *
+ *  Accounting only: emission is still governed solely by
+ *  GetBlockSubsidy(). Enforcement of the cap is deferred to a future
+ *  RIP (see whitepaper v1.6.4 Sec.3 Scenario II, t_trans).
+ */
+CAmount GetTotalSubsidy(int nHeight, const Consensus::Params& consensusParams)
+{
+    if (nHeight <= 0) return 0;
+    const int64_t interval = consensusParams.nSubsidyHalvingInterval;
+    const int64_t h = nHeight;
+    CAmount nTotal = 0;
+    // Phases 0-3: 50 -> 25 -> 12.5 -> 6.25 RIN, one interval each
+    for (int k = 0; k < 4; ++k) {
+        const int64_t lo = k * interval;
+        const int64_t hi = std::min(h, (k + 1) * interval);
+        if (hi > lo) nTotal += (hi - lo) * ((50 * COIN) >> k);
+    }
+    // Phase 4 [4I,10I): 4 RIN
+    { const int64_t lo = 4*interval, hi = std::min(h, 10*interval);
+      if (hi > lo) nTotal += (hi - lo) * (4 * COIN); }
+    // Phase 5 [10I,20I): 2 RIN
+    { const int64_t lo = 10*interval, hi = std::min(h, 20*interval);
+      if (hi > lo) nTotal += (hi - lo) * (2 * COIN); }
+    // Phase 6 [20I,30I): 1 RIN
+    { const int64_t lo = 20*interval, hi = std::min(h, 30*interval);
+      if (hi > lo) nTotal += (hi - lo) * (1 * COIN); }
+    // Terminal [30I, h): 0.6 RIN
+    if (h > 30*interval) nTotal += (h - 30*interval) * CAmount(60000000);
+    return std::min(nTotal, GetSupplyCap(consensusParams));
+}
+
 CoinsViews::CoinsViews(
     std::string ldb_name,
     size_t cache_size_bytes,
