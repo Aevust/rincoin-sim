@@ -124,11 +124,11 @@ MESSAGEMAP = {
 }
 
 MAGIC_BYTES = {
-    "mainnet": b"\x52\x49\x4e\x43",   # "RINC" -- chainparams.cpp:148-151
-    "testnet4": b"\x72\x69\x6e\x74",  # "rint" -- chainparams.cpp:371-374
-    "regtest": b"\x72\x72\x63\x74",   # "rrct" -- chainparams.cpp:464-467
-    # No signet: this tree does not support it -- CreateChainParams() falls back
-    # to testnet params (chainparams.cpp:590). Absent on purpose, so that a
+    "mainnet": b"\x52\x49\x4e\x43",   # "RINC" -- CMainParams
+    "testnet4": b"\x72\x69\x6e\x74",  # "rint" -- CTestNetParams
+    "regtest": b"\x72\x72\x63\x74",   # "rrct" -- CRegTestParams
+    # No signet: this tree does not support it -- CreateChainParams() returns
+    # CTestNetParams for the signet chain name. Absent on purpose, so that a
     # lookup fails loudly if signet is ever added without updating this table.
 }
 
