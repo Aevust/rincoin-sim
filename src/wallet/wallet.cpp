@@ -3158,8 +3158,8 @@ bool CWallet::CreateTransaction(
     // later witness version while that deployment is sealed. Such outputs are
     // anyone-can-spend at the consensus level. This is reachable from
     // sendtoaddress, not only from the raw transaction APIs: DecodeDestination
-    // accepts genuine bech32m v1 addresses (key_io.cpp:112-144) and maps them to
-    // WitnessUnknown, which GetScriptForDestination renders as OP_1 <program>.
+    // accepts genuine bech32m v1 addresses and maps them to WitnessUnknown,
+    // which GetScriptForDestination renders as OP_1 <program>.
     //
     // The deployment parameter is read directly rather than querying activation
     // state: VersionBitsState requires cs_main, and cs_wallet is already held
@@ -3169,9 +3169,9 @@ bool CWallet::CreateTransaction(
             == Consensus::BIP9Deployment::NEVER_ACTIVE) {
         for (const CRecipient& recipient : vecSend) {
             // StealthAddress recipients carry no script: GetScript() asserts on
-            // !IsMWEB() (script/address.cpp:25). Script-bearing MWEB constructs
-            // are classified as WITNESS_MWEB_PEGIN / _HOGADDR before the
-            // WITNESS_UNKNOWN fallback (script/standard.cpp:141,145).
+            // !IsMWEB(). Script-bearing MWEB constructs are classified by
+            // Solver() as WITNESS_MWEB_PEGIN / _HOGADDR before the
+            // WITNESS_UNKNOWN fallback.
             if (recipient.IsMWEB()) continue;
 
             std::vector<std::vector<unsigned char>> solutions;
