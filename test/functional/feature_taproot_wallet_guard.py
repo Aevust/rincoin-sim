@@ -10,24 +10,24 @@ RIP-0011 wallet guard -- refuse to create outputs paying to witness v1
 (Taproot) or any later witness version while that deployment is sealed.
 
 Why the guard exists:
-    Taproot is NEVER_ACTIVE on mainnet (chainparams.cpp:129), so an
+    Taproot is NEVER_ACTIVE on mainnet (CMainParams), so an
     OP_1 <32-byte> output is anyone-can-spend at the consensus level there.
     The hazard is reachable from sendtoaddress, not only from the raw
     transaction APIs: DecodeDestination accepts genuine bech32m v1
-    addresses (key_io.cpp:111-118; the BIP350 encoding rules are enforced
-    at 115 and 118) and maps them to WitnessUnknown (141-148), which
-    GetScriptForDestination renders as OP_1 <program>.
+    addresses -- it enforces the BIP350 rule that a non-zero witness
+    version must be bech32m and a zero version must not be -- and maps
+    them to WitnessUnknown, which GetScriptForDestination renders as
+    OP_1 <program>.
 
 Why this test can exercise both branches:
-    regtest ships Taproot as ALWAYS_ACTIVE (chainparams.cpp:453), so the
+    regtest ships Taproot as ALWAYS_ACTIVE (CRegTestParams), so the
     guard is off by default here. It is switched on with
         -vbparams=taproot:-2:9223372036854775807
-    where -2 == Consensus::BIP9Deployment::NEVER_ACTIVE (params.h:50). The
-    -vbparams parser applies ParseInt64 with no range check
-    (chainparams.cpp:549), which is what makes the negative sentinel
-    injectable. The 3-argument form zero-initialises the height fields
-    (chainparams.cpp:546-548); the guard reads nStartTime only, so that is
-    immaterial here.
+    where -2 == Consensus::BIP9Deployment::NEVER_ACTIVE. The -vbparams
+    parser in CRegTestParams::UpdateActivationParametersFromArgs applies
+    ParseInt64 with no range check, which is what makes the negative
+    sentinel injectable. The 3-argument form zero-initialises the height
+    fields; the guard reads nStartTime only, so that is immaterial here.
 
     The guard reads the deployment parameter directly rather than querying
     activation state, because VersionBitsState requires cs_main while
@@ -41,10 +41,10 @@ Subtests:
                      the witness version.
     [03] guard on  : an MWEB recipient does not reach the guard's
                      GetScript() call. DestinationAddr::GetScript() asserts
-                     on !IsMWEB() (script/address.cpp:25), so a guard that
-                     drops its IsMWEB() early-continue would abort the node
-                     rather than fail an RPC. This subtest is the permanent
-                     regression guard for that failure mode. An abort would
+                     on !IsMWEB(), so a guard that drops its IsMWEB()
+                     early-continue would abort the node rather than fail
+                     an RPC. This subtest is the permanent regression
+                     guard for that failure mode. An abort would
                      surface first as a transport-level failure of the send
                      itself, since the node dies mid-request; the
                      getblockcount that follows confirms the node is still
@@ -56,12 +56,12 @@ from test_framework.authproxy import JSONRPCException
 from test_framework.segwit_addr import encode_segwit_address
 from test_framework.util import assert_equal, assert_raises_rpc_error
 
-# Consensus::BIP9Deployment sentinels (src/consensus/params.h:45,50).
+# Consensus::BIP9Deployment sentinels, from src/consensus/params.h.
 NEVER_ACTIVE = -2
 NO_TIMEOUT = 9223372036854775807
 
 # Deterministic 32-byte witness program. WITNESS_V1_TAPROOT_SIZE is 32, so
-# Solver() classifies this as WITNESS_V1_TAPROOT (script/standard.cpp:136).
+# Solver() classifies this as WITNESS_V1_TAPROOT.
 # The value is never spent, so it need not be a valid x-only pubkey.
 TAPROOT_PROGRAM = bytes(range(32))
 
@@ -76,12 +76,12 @@ GUARD_ERROR_FRAGMENT = "witness version"
 #   const bool fCreated = pwallet->CreateTransaction(..., error, ...);
 #   if (!fCreated) {
 #       throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, error.original);
-#   }                                          -- rpcwallet.cpp:449-452
+#   }                              -- SendMoney(), src/wallet/rpcwallet.cpp
 #
 # The code is therefore -6, not RPC_WALLET_ERROR. Every other throw in that
 # file uses RPC_WALLET_ERROR, so -6 is specific to this path. error is a
-# bilingual_str (declared at 446) and .original is the untranslated text, so
-# the English fragment above matches whatever locale the node runs under.
+# bilingual_str and .original is the untranslated text, so the English
+# fragment above matches whatever locale the node runs under.
 GUARD_ERROR_CODE = -6
 
 SEAL_TAPROOT_ARG = f"-vbparams=taproot:{NEVER_ACTIVE}:{NO_TIMEOUT}"
@@ -226,11 +226,11 @@ class TaprootWalletGuardTest(BitcoinTestFramework):
         self.log.info(f"  sendtoaddress txid = {txid}")
 
         # Confirmation. If the guard had called GetScript() on a
-        # StealthAddress, the assert at script/address.cpp:25 would have
-        # aborted the node -- which would already have broken the send
-        # above at the transport layer, since the node dies mid-request
-        # and never returns a JSON error. This call proves the node is
-        # still serving afterwards.
+        # StealthAddress, the assert in DestinationAddr::GetScript()
+        # would have aborted the node -- which would already have broken
+        # the send above at the transport layer, since the node dies
+        # mid-request and never returns a JSON error. This call proves
+        # the node is still serving afterwards.
         assert_equal(node.getblockcount(), height_before)
         self.log.info("  [PASS] node still answering RPCs; no assert reached")
 
