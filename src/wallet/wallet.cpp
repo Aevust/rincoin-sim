@@ -3119,6 +3119,19 @@ bool CWallet::FundTransaction(CMutableTransaction& tx, CAmount& nFeeRet, int& nC
         return false;
     }
 
+    // Rincoin RIN3 fork: CreateTransaction() chose the version of tx_new in
+    // wallet/txassembler.cpp, which switches to RIN_FORK_TX_VERSION one block
+    // before nRinHashForkHeight. Carry it over, so that transactions funded
+    // through this path (fundrawtransaction, walletcreatefundedpsbt, send)
+    // carry the marker too. A caller that set its own version keeps it: this
+    // function has always preserved the caller's version, and the workaround
+    // published with v1.1.0-rc1 (setting the marker before funding) relies on
+    // that. The fork height is not consulted here, so txassembler stays the
+    // only place that decides the version.
+    if (tx.nVersion == CTransaction::CURRENT_VERSION) {
+        tx.nVersion = tx_new->nVersion;
+    }
+
     if (nChangePosInOut != -1) {
         tx.vout.insert(tx.vout.begin() + nChangePosInOut, tx_new->vout[nChangePosInOut]);
     }
