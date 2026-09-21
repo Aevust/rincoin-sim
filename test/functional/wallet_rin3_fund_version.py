@@ -22,10 +22,13 @@ workaround published with the v1.1.0-rc1 release notes -- setting the marker
 before funding -- depends on that and is exercised here.
 
 Test matrix:
-    [01] tip 838 : fundrawtransaction                 -> nVersion 2
+    [01] tip 838 : fundrawtransaction, walletcreatefundedpsbt and send
+                                                      -> nVersion 2
     [02] tip 838 : caller set the marker, then fund   -> marker kept
-    [03] tip 839 : fundrawtransaction                 -> marker, it sends, and
-                   it is mined into block 840
+    [03] tip 839 : fundrawtransaction, walletcreatefundedpsbt and send
+                                                      -> marker; the
+                   fundrawtransaction and send transactions are mined
+                   into block 840
     [04] tip 840 : walletcreatefundedpsbt             -> marker
     [05] tip 840 : caller set nVersion 2, then fund   -> marker (not kept:
                    2 is the default and cannot be told apart from it);
@@ -111,21 +114,49 @@ class WalletRin3FundVersionTest(BitcoinTestFramework):
         )
         return node.sendrawtransaction(signed["hex"])
 
+    def _psbt_version(self) -> int:
+        """walletcreatefundedpsbt for one output; return the version."""
+        node = self.nodes[0]
+        psbt = node.walletcreatefundedpsbt([], [{node.getnewaddress(): 1}])["psbt"]
+        return node.decodepsbt(psbt)["tx"]["version"]
+
+    def _send(self) -> tuple:
+        """send with its defaults, which funds, signs and broadcasts;
+        return (txid, version)."""
+        node = self.nodes[0]
+        # send funds through CWallet::FundTransaction() as well
+        # (rpcwallet.cpp).
+        res = node.send({node.getnewaddress(): 1})
+        assert_equal(res["complete"], True)
+        txid = res["txid"]
+        assert txid in node.getrawmempool()
+        return txid, node.decoderawtransaction(node.gettransaction(txid)["hex"])["version"]
+
     # ------------------------------------------------------------------
     # Subtests
     # ------------------------------------------------------------------
 
     def subtest_01_before_boundary_legacy(self):
-        self.log.info("[01] tip 838: fundrawtransaction emits the legacy version")
+        self.log.info("[01] tip 838: the three funding RPCs emit the legacy version")
         node = self.nodes[0]
         self._mine_to(FORK_HEIGHT - 2)
 
         funded, version = self._fund(self._skeleton())
-        self.log.info(f"  nVersion = {version}")
+        self.log.info(f"  fundrawtransaction     nVersion = {version}")
         assert_equal(version, LEGACY_TX_VERSION)
-        # It is spendable here: the next block is still before the fork height.
+        # Spendable here: the next block is still before the fork height.
         self._sign_and_send(funded)
-        assert_equal(node.getmempoolinfo()["size"], 1)
+
+        version = self._psbt_version()
+        self.log.info(f"  walletcreatefundedpsbt nVersion = {version}")
+        assert_equal(version, LEGACY_TX_VERSION)
+
+        _, version = self._send()
+        self.log.info(f"  send                   nVersion = {version}")
+        assert_equal(version, LEGACY_TX_VERSION)
+
+        # The funded transaction and the one send broadcast.
+        assert_equal(node.getmempoolinfo()["size"], 2)
 
     def subtest_02_before_boundary_caller_version_kept(self):
         self.log.info("[02] tip 838: a marker set by the caller survives funding")
@@ -139,20 +170,32 @@ class WalletRin3FundVersionTest(BitcoinTestFramework):
         self._sign_and_send(funded)
 
     def subtest_03_at_boundary_marker(self):
-        self.log.info("[03] tip 839: fundrawtransaction emits the marker and it sends")
+        self.log.info("[03] tip 839: the three funding RPCs emit the marker")
         node = self.nodes[0]
         self._mine_to(FORK_HEIGHT - 1)
+        # Block 839 took everything the tip-838 subtests left in the mempool.
+        assert_equal(node.getmempoolinfo()["size"], 0)
 
         funded, version = self._fund(self._skeleton())
-        self.log.info(f"  nVersion = {version} ({version:#010x})")
+        self.log.info(f"  fundrawtransaction     nVersion = {version} ({version:#010x})")
         assert_equal(version, RIN_FORK_TX_VERSION)
         txid = self._sign_and_send(funded)
         assert txid in node.getrawmempool()
 
-        # It is mineable into the fork block, which the legacy version is not.
+        version = self._psbt_version()
+        self.log.info(f"  walletcreatefundedpsbt nVersion = {version} ({version:#010x})")
+        assert_equal(version, RIN_FORK_TX_VERSION)
+
+        send_txid, version = self._send()
+        self.log.info(f"  send                   nVersion = {version} ({version:#010x})")
+        assert_equal(version, RIN_FORK_TX_VERSION)
+
+        # Both are mineable into the fork block, which the legacy version is not.
         block_hash = node.generatetoaddress(1, node.getnewaddress())[0]
         assert_equal(node.getblockcount(), FORK_HEIGHT)
-        assert txid in node.getblock(block_hash)["tx"]
+        block_txs = node.getblock(block_hash)["tx"]
+        assert txid in block_txs
+        assert send_txid in block_txs
         assert_equal(node.gettransaction(txid)["confirmations"], 1)
         assert_equal(node.getblockstats(FORK_HEIGHT)["subsidy"], 400000000)
 
@@ -161,8 +204,7 @@ class WalletRin3FundVersionTest(BitcoinTestFramework):
         node = self.nodes[0]
         assert_equal(node.getblockcount(), FORK_HEIGHT)
 
-        psbt    = node.walletcreatefundedpsbt([], [{node.getnewaddress(): 1}])["psbt"]
-        version = node.decodepsbt(psbt)["tx"]["version"]
+        version = self._psbt_version()
         self.log.info(f"  nVersion = {version} ({version:#010x})")
         assert_equal(version, RIN_FORK_TX_VERSION)
 
@@ -195,14 +237,7 @@ class WalletRin3FundVersionTest(BitcoinTestFramework):
 
     def subtest_07_at_boundary_send_rpc(self):
         self.log.info("[07] tip 840: the send RPC emits the marker")
-        node = self.nodes[0]
-        # send funds through CWallet::FundTransaction() as well
-        # (rpcwallet.cpp), then signs and broadcasts by default.
-        res = node.send({node.getnewaddress(): 1})
-        assert_equal(res["complete"], True)
-        txid = res["txid"]
-        assert txid in node.getrawmempool()
-        version = node.decoderawtransaction(node.gettransaction(txid)["hex"])["version"]
+        _, version = self._send()
         self.log.info(f"  nVersion = {version} ({version:#010x})")
         assert_equal(version, RIN_FORK_TX_VERSION)
 
