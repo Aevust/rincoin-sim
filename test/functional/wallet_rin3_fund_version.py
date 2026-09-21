@@ -14,7 +14,7 @@ transaction CreateTransaction() built, and its version. CreateTransaction()
 reaches wallet/txassembler.cpp, which switches to RIN_FORK_TX_VERSION when
 the wallet's last processed block is at nRinHashForkHeight - 1 or above, so
 transactions funded through fundrawtransaction, walletcreatefundedpsbt and
-send switch at the same block as the wallet's own send path.
+send switch at the same block as transactions the wallet builds itself.
 
 A version the caller set is kept, because the copy is conditional on the
 value rawtransaction_util.cpp gives a transaction it constructs. The
@@ -32,6 +32,8 @@ Test matrix:
                    setting 2 after funding gives a transaction the
                    mempool rejects with bad-tx-rinhash-version
     [06] tip 840 : sendtoaddress                      -> marker (control)
+    [07] tip 840 : send                               -> marker, and it is in
+                   the mempool
 
 Not covered here: the enforcement rules themselves, which
 feature_rin3_enforcement.py covers, and the boundary behaviour of a node
@@ -191,6 +193,19 @@ class WalletRin3FundVersionTest(BitcoinTestFramework):
         self.log.info(f"  nVersion = {version} ({version:#010x})")
         assert_equal(version, RIN_FORK_TX_VERSION)
 
+    def subtest_07_at_boundary_send_rpc(self):
+        self.log.info("[07] tip 840: the send RPC emits the marker")
+        node = self.nodes[0]
+        # send funds through CWallet::FundTransaction() as well
+        # (rpcwallet.cpp), then signs and broadcasts by default.
+        res = node.send({node.getnewaddress(): 1})
+        assert_equal(res["complete"], True)
+        txid = res["txid"]
+        assert txid in node.getrawmempool()
+        version = node.decoderawtransaction(node.gettransaction(txid)["hex"])["version"]
+        self.log.info(f"  nVersion = {version} ({version:#010x})")
+        assert_equal(version, RIN_FORK_TX_VERSION)
+
     # ------------------------------------------------------------------
 
     def run_test(self):
@@ -207,11 +222,12 @@ class WalletRin3FundVersionTest(BitcoinTestFramework):
         self.subtest_04_at_boundary_psbt()
         self.subtest_05_at_boundary_explicit_legacy_not_kept()
         self.subtest_06_at_boundary_sendtoaddress_control()
+        self.subtest_07_at_boundary_send_rpc()
 
         self.log.info("=" * 55)
-        self.log.info("  ALL 6 SUBTESTS PASSED")
-        self.log.info("  fundrawtransaction, walletcreatefundedpsbt and the")
-        self.log.info("  wallet's own send path agree on the version")
+        self.log.info("  ALL 7 SUBTESTS PASSED")
+        self.log.info("  fundrawtransaction, walletcreatefundedpsbt, send and")
+        self.log.info("  the wallet's own transactions agree on the version")
         self.log.info("=" * 55)
 
 
