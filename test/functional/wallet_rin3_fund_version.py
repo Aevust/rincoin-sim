@@ -26,9 +26,9 @@ Test matrix:
                                                       -> nVersion 2
     [02] tip 838 : caller set the marker, then fund   -> marker kept
     [03] tip 839 : fundrawtransaction, walletcreatefundedpsbt and send
-                                                      -> marker; the
-                   fundrawtransaction and send transactions are mined
-                   into block 840
+                                                      -> marker; the PSBT is
+                   processed, finalized and sent, and all three
+                   transactions are mined into block 840
     [04] tip 840 : walletcreatefundedpsbt             -> marker
     [05] tip 840 : caller set nVersion 2, then fund   -> marker (not kept:
                    2 is the default and cannot be told apart from it);
@@ -114,11 +114,28 @@ class WalletRin3FundVersionTest(BitcoinTestFramework):
         )
         return node.sendrawtransaction(signed["hex"])
 
-    def _psbt_version(self) -> int:
-        """walletcreatefundedpsbt for one output; return the version."""
+    def _psbt(self) -> tuple:
+        """walletcreatefundedpsbt for one output; return (psbt, version)."""
         node = self.nodes[0]
         psbt = node.walletcreatefundedpsbt([], [{node.getnewaddress(): 1}])["psbt"]
-        return node.decodepsbt(psbt)["tx"]["version"]
+        return psbt, node.decodepsbt(psbt)["tx"]["version"]
+
+    def _psbt_version(self) -> int:
+        return self._psbt()[1]
+
+    def _psbt_process_and_send(self, psbt: str) -> str:
+        """Sign, finalize and broadcast a funded PSBT; return the txid.
+        The version must survive every step, as the signature commits to it."""
+        node      = self.nodes[0]
+        version   = node.decodepsbt(psbt)["tx"]["version"]
+        processed = node.walletprocesspsbt(psbt)
+        assert_equal(processed["complete"], True)
+        finalized = node.finalizepsbt(processed["psbt"])
+        assert_equal(finalized["complete"], True)
+        assert_equal(node.decoderawtransaction(finalized["hex"])["version"], version)
+        txid = node.sendrawtransaction(finalized["hex"])
+        assert txid in node.getrawmempool()
+        return txid
 
     def _send(self) -> tuple:
         """send with its defaults, which funds, signs and broadcasts;
@@ -182,19 +199,23 @@ class WalletRin3FundVersionTest(BitcoinTestFramework):
         txid = self._sign_and_send(funded)
         assert txid in node.getrawmempool()
 
-        version = self._psbt_version()
+        psbt, version = self._psbt()
         self.log.info(f"  walletcreatefundedpsbt nVersion = {version} ({version:#010x})")
         assert_equal(version, RIN_FORK_TX_VERSION)
+        # The PSBT path end to end: the marker survives signing and finalizing.
+        psbt_txid = self._psbt_process_and_send(psbt)
 
         send_txid, version = self._send()
         self.log.info(f"  send                   nVersion = {version} ({version:#010x})")
         assert_equal(version, RIN_FORK_TX_VERSION)
 
-        # Both are mineable into the fork block, which the legacy version is not.
+        # All three are mineable into the fork block, which the legacy version
+        # is not.
         block_hash = node.generatetoaddress(1, node.getnewaddress())[0]
         assert_equal(node.getblockcount(), FORK_HEIGHT)
         block_txs = node.getblock(block_hash)["tx"]
         assert txid in block_txs
+        assert psbt_txid in block_txs
         assert send_txid in block_txs
         assert_equal(node.gettransaction(txid)["confirmations"], 1)
         assert_equal(node.getblockstats(FORK_HEIGHT)["subsidy"], 400000000)
