@@ -24,7 +24,7 @@
 #      walletcreatefundedpsbt produce are recorded as notes (on v1.1.0-rc1
 #      they are 2, and the transaction is rejected). With EXPECT_FUND_MARKER=1
 #      they are checks: the funded transaction must carry the marker and send.
-#      In both modes, a version the caller set before funding must survive.
+#      In both modes, the marker set before funding must survive funding.
 #
 # Binaries: BUILD_DIR/src or BUILD_DIR/bin when BUILD_DIR is given; otherwise
 #   resolved relative to this script (../bin, then ../src), as the other
@@ -392,13 +392,16 @@ else
         fi
     fi
 fi
-# A version the caller set before funding must survive funding, in both modes:
-# the workaround published with v1.1.0-rc1 depends on it.
+# The marker set before funding must survive funding, in both modes: the
+# workaround published with v1.1.0-rc1 sets it there. Only the marker is
+# checked. On a tree that carries the wallet's version through
+# FundTransaction(), a caller that sets 2 cannot be told apart from the
+# default and gets the wallet's version instead.
 RAW2=$(a createrawtransaction '[]' "[{\"$AA\":1}]")
 FUND2=$(a fundrawtransaction "${MARKER_HEX_LE}${RAW2:8}" | j 'd["hex"]')
 FV2=$(a decoderawtransaction "$FUND2" | j 'd["version"]')
 if [ "$FV2" = "$MARKER_DEC" ]; then
-    ok "F: a version set before fundrawtransaction survives funding"
+    ok "F: the marker set before fundrawtransaction survives funding"
     SIGNED2=$(a signrawtransactionwithwallet "$FUND2" | j 'd["hex"]')
     if SENT2=$(a sendrawtransaction "$SIGNED2" 2>&1); then
         ok "F: that transaction is accepted: $SENT2"
@@ -406,7 +409,7 @@ if [ "$FV2" = "$MARKER_DEC" ]; then
         ng "F: that transaction is rejected: $(echo "$SENT2" | tr '\n' ' ')"
     fi
 else
-    ng "F: a version set before fundrawtransaction was replaced by $FV2"
+    ng "F: the marker set before fundrawtransaction was replaced by $FV2"
 fi
 CV=$(version_of a "$(a sendtoaddress "$AA" 1)")
 if [ "$CV" = "$MARKER_DEC" ]; then
