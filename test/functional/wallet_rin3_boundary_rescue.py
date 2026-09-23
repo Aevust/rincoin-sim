@@ -9,16 +9,24 @@ wallet_rin3_boundary_rescue.py
 Rincoin RIN3 (nVersion replay protection) -- a legacy-version transaction
 that was broadcast before the fork height and did not confirm.
 
-From the fork height a transaction with nVersion 2 is never mined again, but
-a mempool that accepted one before the fork keeps it: block assembly skips
-it, and nothing in the fork rule removes it. It stays until it expires
+In a block at or above the fork height, RIN3 requires nVersion
+RIN_FORK_TX_VERSION (the marker) on every transaction except the coinbase,
+the HogEx and MWEB-only ones (validation.cpp, ContextualCheckBlock()). A
+node that enforces the rule rejects a block that breaks it and does not put
+a transaction that would break it into a block it assembles at those
+heights, so the chain those nodes follow has no such transaction from the
+fork height on. A node that does not enforce the rule treats such a
+transaction at those heights as it does below them.
+
+A mempool that accepted such a transaction before the fork keeps it:
+nothing in the fork rule removes it. It stays until it expires
 (-mempoolexpiry, 336 hours by default), is evicted to make room, is
 conflicted by a transaction in a connected block, or the node restarts. On
 this tree the mempool also refuses a replacement by default, so while a node
 holds such a transaction it refuses any other transaction that spends the
-same inputs. A restart drops it: LoadMempool() runs every saved transaction
-through mempool acceptance again, and from the fork height the legacy
-version is refused there.
+same inputs. A restart drops it: LoadMempool() skips a saved transaction
+that has expired and runs every other one through mempool acceptance again,
+where from the fork height the legacy version is refused.
 
 The replacement policy is inherited from Litecoin. Bitcoin Core v0.21.2
 honours BIP 125 signalling unconditionally (validation.cpp,
@@ -244,10 +252,15 @@ class WalletRin3BoundaryRescueTest(BitcoinTestFramework):
         self.log.info("[07] node1 still holds A and B and refuses R_A and R_B")
         node0, node1 = self.nodes
         self.connect_nodes(1, 0)
+        # node1 logs each refusal on one line, "<txid> from peer=<id> was not
+        # accepted: <reason>"; its only peer is node0.
+        peers = node1.getpeerinfo()
+        assert_equal(len(peers), 1)
+        peer_id = peers[0]["id"]
+        reason = "was not accepted: txn-mempool-conflict"
         with node1.assert_debug_log([
-                f"{self.tx_ra} from peer",
-                f"{self.tx_rb} from peer",
-                "was not accepted: txn-mempool-conflict"], timeout=30):
+                f"{self.tx_ra} from peer={peer_id} {reason}",
+                f"{self.tx_rb} from peer={peer_id} {reason}"], timeout=30):
             node0.sendrawtransaction(self._wallet_hex(self.tx_ra))
             node0.sendrawtransaction(self._wallet_hex(self.tx_rb))
         mempool = node1.getrawmempool()
@@ -323,8 +336,8 @@ class WalletRin3BoundaryRescueTest(BitcoinTestFramework):
         self.log.info("=" * 55)
         self.log.info("  ALL 9 SUBTESTS PASSED")
         self.log.info("  a node that holds a pre-fork legacy transaction refuses its")
-        self.log.info("  re-creation until it restarts, when LoadMempool() drops the")
-        self.log.info("  legacy one; after that the re-creations confirm")
+        self.log.info("  re-creation; a restart drops the legacy one (LoadMempool())")
+        self.log.info("  and the re-creations then confirm")
         self.log.info("=" * 55)
 
 
