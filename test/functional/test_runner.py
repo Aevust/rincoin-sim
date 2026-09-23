@@ -259,6 +259,7 @@ BASE_SCRIPTS = [
     'wallet_listwallettransactions.py',
     'rpc_uptime.py',
     'wallet_rin3_fund_version.py',
+    'wallet_rin3_boundary_rescue.py',
     'wallet_resendwallettransactions.py',
     'wallet_resendwallettransactions.py --descriptors',
     'wallet_fallbackfee.py',
