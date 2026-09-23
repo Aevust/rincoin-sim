@@ -10,16 +10,19 @@ Rincoin RIN3 (nVersion replay protection) -- the version the wallet puts on
 transactions it funds for a caller.
 
 CWallet::FundTransaction() copies the amounts and the inputs of the
-transaction CreateTransaction() built, and its version. CreateTransaction()
-reaches wallet/txassembler.cpp, which switches to RIN_FORK_TX_VERSION when
-the wallet's last processed block is at nRinHashForkHeight - 1 or above, so
-transactions funded through fundrawtransaction, walletcreatefundedpsbt and
-send switch at the same block as transactions the wallet builds itself.
+transaction CreateTransaction() built, and also its version when the
+caller's transaction has CTransaction::CURRENT_VERSION (2), the value
+rawtransaction_util.cpp gives a transaction it constructs.
+CreateTransaction() reaches wallet/txassembler.cpp, which switches to
+RIN_FORK_TX_VERSION when the wallet's last processed block is at
+nRinHashForkHeight - 1 or above, so a transaction with that version funded
+through fundrawtransaction, walletcreatefundedpsbt or send switches at the
+same block as transactions the wallet builds itself.
 
-A version the caller set is kept, because the copy is conditional on the
-value rawtransaction_util.cpp gives a transaction it constructs. The
-workaround published with the v1.1.0-rc1 release notes -- setting the marker
-before funding -- depends on that and is exercised here.
+Any other version the caller set is kept. The workaround published with the
+v1.1.0-rc1 release notes -- setting the marker before funding -- depends on
+that and is exercised here. A caller that set 2 itself cannot be told apart
+from one that left the default, and gets the wallet's version.
 
 Test matrix:
     [01] tip 838 : fundrawtransaction, walletcreatefundedpsbt and send
@@ -282,8 +285,9 @@ class WalletRin3FundVersionTest(BitcoinTestFramework):
 
         self.log.info("=" * 55)
         self.log.info("  ALL 7 SUBTESTS PASSED")
-        self.log.info("  fundrawtransaction, walletcreatefundedpsbt, send and")
-        self.log.info("  the wallet's own transactions agree on the version")
+        self.log.info("  from a default skeleton, fundrawtransaction,")
+        self.log.info("  walletcreatefundedpsbt and send give the version")
+        self.log.info("  the wallet gives its own transactions")
         self.log.info("=" * 55)
 
 
