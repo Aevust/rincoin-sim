@@ -413,6 +413,7 @@ enum class MemPoolRemovalReason {
     BLOCK,       //!< Removed for block
     CONFLICT,    //!< Removed for conflict with in-block transaction
     REPLACED,    //!< Removed for replacement
+    RIN3_FORK,   //!< Removed at the RIN3 fork height for lacking the nVersion marker (RIP-0009)
 };
 
 class SaltedTxidHasher
