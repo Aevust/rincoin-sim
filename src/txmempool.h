@@ -659,6 +659,14 @@ public:
     void removeForReorg(const CCoinsViewCache* pcoins, unsigned int nMemPoolHeight, int flags) EXCLUSIVE_LOCKS_REQUIRED(cs, cs_main);
     void removeConflicts(const CTransaction& tx) EXCLUSIVE_LOCKS_REQUIRED(cs);
     void removeForBlock(const CBlock& block, unsigned int nBlockHeight, DisconnectedBlockTransactions* disconnectpool) EXCLUSIVE_LOCKS_REQUIRED(cs);
+    /**
+     * Rincoin RIN3 fork (RIP-0009): remove every transaction that is not
+     * MWEB-only and does not carry CTransaction::RIN_FORK_TX_VERSION, together
+     * with all of its in-mempool descendants. Called by ConnectTip() each
+     * time the block before nRinHashForkHeight is connected. Returns the
+     * number of transactions removed.
+     */
+    unsigned int removeForRIN3Fork() EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     void clear();
     void _clear() EXCLUSIVE_LOCKS_REQUIRED(cs); //lock free
