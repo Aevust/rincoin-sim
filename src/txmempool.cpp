@@ -311,6 +311,20 @@ void CTxMemPool::UpdateForRemoveFromMempool(const setEntries &entriesToRemove, b
         // we use the cached notion of ancestor transactions as the set of
         // things to update for removal.
         CalculateMemPoolAncestors(entry, setAncestors, nNoLimit, nNoLimit, nNoLimit, nNoLimit, dummy, false);
+        // An ancestor that is itself in entriesToRemove is erased by the same
+        // call (RemoveStaged() or removeForRIN3Fork()), so its descendant state
+        // is not used again (CalculateMemPoolAncestors() above only compares it
+        // against nNoLimit): skip the mapTx.modify() for it. The parent/child
+        // links are still severed by UpdateAncestorsOf() and
+        // UpdateChildrenForRemoval(). Without this, removing a set of long
+        // chains re-indexes every ancestor once per descendant.
+        for (auto a = setAncestors.begin(); a != setAncestors.end();) {
+            if (entriesToRemove.count(*a)) {
+                a = setAncestors.erase(a);
+            } else {
+                ++a;
+            }
+        }
         // Note that UpdateAncestorsOf severs the child links that point to
         // removeIt in the entries for the parents of removeIt.
         UpdateAncestorsOf(false, removeIt, setAncestors);
