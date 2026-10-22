@@ -1312,8 +1312,12 @@ void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRe
     }
 
     // Handle transactions that were removed from the mempool because they
-    // conflict with transactions in a newly connected block.
-    if (reason == MemPoolRemovalReason::CONFLICT) {
+    // conflict with transactions in a newly connected block (CONFLICT), and
+    // those removed when the block before the RIN3 fork height was connected
+    // because they lack the nVersion marker (RIN3_FORK; RIP-0009,
+    // CTxMemPool::removeForRIN3Fork()). Such a transaction can be mined only
+    // in a block below nRinHashForkHeight, that is, only after a reorg below it.
+    if (reason == MemPoolRemovalReason::CONFLICT || reason == MemPoolRemovalReason::RIN3_FORK) {
         // Call SyncNotifications, so external -walletnotify notifications will
         // be triggered for these transactions. Set Status::UNCONFIRMED instead
         // of Status::CONFLICTED for a few reasons:
@@ -1323,16 +1327,21 @@ void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRe
         //    compatibility reasons it may not be not safe to store conflicted
         //    wallet transactions with a null block hash. See
         //    https://github.com/bitcoin/bitcoin/pull/18600#discussion_r420195993.
+        //    A RIN3_FORK removal has no conflicting block at all.
         // 2. For most of these transactions, the wallet's internal conflict
         //    detection in the blockConnected handler will subsequently call
         //    MarkConflicted and update them with CONFLICTED status anyway. This
         //    applies to any wallet transaction that has inputs spent in the
         //    block, or that has ancestors in the wallet with inputs spent by
-        //    the block.
+        //    the block. It does not apply to RIN3_FORK removals: the block does
+        //    not spend their inputs. They stay UNCONFIRMED, and their inputs
+        //    stay spent (IsSpent()), until they are abandoned, until a
+        //    transaction spending one of the same inputs is confirmed, or until
+        //    a reorg confirms them in a block below the fork height.
         // 3. Longstanding behavior since the sync implementation in
         //    https://github.com/bitcoin/bitcoin/pull/9371 and the prior sync
         //    implementation before that was to mark these transactions
-        //    unconfirmed rather than conflicted.
+        //    unconfirmed rather than conflicted. RIN3_FORK removals follow it.
         //
         // Nothing described above should be seen as an unchangeable requirement
         // when improving this code in the future. The wallet's heuristics for

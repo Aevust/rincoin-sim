@@ -2821,6 +2821,18 @@ bool CChainState::ConnectTip(BlockValidationState& state, const CChainParams& ch
     LogPrint(BCLog::BENCH, "  - Writing chainstate: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime5 - nTime4) * MILLI, nTimeChainState * MICRO, nTimeChainState * MILLI / nBlocksTotal);
     // Remove conflicting transactions from the mempool.;
     m_mempool.removeForBlock(blockConnecting, pindexNew->nHeight, &disconnectpool);
+    // Rincoin RIN3 fork (RIP-0009): the next block is at nRinHashForkHeight,
+    // from which a transaction without the nVersion marker cannot be mined
+    // (ContextualCheckBlock()). Remove those still in the mempool, with their
+    // descendants. This must follow removeForBlock(): a transaction this block
+    // confirmed has left the mempool by then, so its in-mempool children that
+    // carry the marker are kept. PreChecks() refuses such transactions once
+    // the tip is at this height or above, so connecting this height is the
+    // only transition that can carry them to such a tip. This runs each time
+    // this height is connected, including after a reorg or invalidateblock.
+    if (pindexNew->nHeight + 1 == chainparams.GetConsensus().nRinHashForkHeight) {
+        m_mempool.removeForRIN3Fork();
+    }
     // Update m_chain & related variables.
     m_chain.SetTip(pindexNew);
     UpdateTip(m_mempool, pindexNew, chainparams);
